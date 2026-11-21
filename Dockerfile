@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # WG2FA server: WireGuard + 2FA + web GUI
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum* ./
