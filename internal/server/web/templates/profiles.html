@@ -1,0 +1,40 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+<section class="card">
+  <h2>VPN profiles</h2>
+  <p class="muted">A profile decides which routes and DNS a client gets, how long a 2FA unlock lasts, and whether 2FA is enforced at all (routers).</p>
+</section>
+{{range .Data}}
+<section class="card">
+  <form method="post" action="/admin/profiles" class="grid2">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input type="hidden" name="id" value="{{.ID}}">
+    <label>Name <input name="name" value="{{.Name}}" required></label>
+    <label>Description <input name="description" value="{{.Description}}"></label>
+    <label>Routes / AllowedIPs (comma separated) <input name="allowed_ips" value="{{join .AllowedIPs ", "}}" required></label>
+    <label>DNS servers <input name="dns" value="{{join .DNS ", "}}"></label>
+    <label>MTU <input name="mtu" type="number" value="{{.MTU}}" min="1280" max="1500"></label>
+    <label>Keepalive (s) <input name="keepalive" type="number" value="{{.Keepalive}}" min="0" max="600"></label>
+    <label>2FA session length (hours) <input name="session_hours" type="number" value="{{.SessionHours}}" min="0" max="720"></label>
+    <label class="check"><input type="checkbox" name="require_2fa" {{if .Require2FA}}checked{{end}}> require 2FA unlock</label>
+    <div class="row"><button class="primary">Save</button></div>
+  </form>
+  <form method="post" action="/admin/profiles/{{.ID}}/delete" data-confirm="Delete profile {{.Name}}?"><input type="hidden" name="csrf" value="{{$csrf}}"><button class="small danger">Delete profile</button></form>
+</section>
+{{end}}
+<section class="card">
+  <h2>New profile</h2>
+  <form method="post" action="/admin/profiles" class="grid2">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <label>Name <input name="name" required placeholder="Office only"></label>
+    <label>Description <input name="description"></label>
+    <label>Routes / AllowedIPs <input name="allowed_ips" required placeholder="10.8.0.0/24, 192.168.10.0/24"></label>
+    <label>DNS servers <input name="dns" placeholder="192.168.10.1"></label>
+    <label>MTU <input name="mtu" type="number" value="1420"></label>
+    <label>Keepalive (s) <input name="keepalive" type="number" value="25"></label>
+    <label>2FA session length (hours) <input name="session_hours" type="number" value="12"></label>
+    <label class="check"><input type="checkbox" name="require_2fa" checked> require 2FA unlock</label>
+    <div><button class="primary">Create profile</button></div>
+  </form>
+</section>
+{{end}}

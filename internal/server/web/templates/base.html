@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · WG2FA</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+{{if .Me}}
+<header class="top">
+  <a class="brand" href="/"><span class="logo">◆</span> WG2FA</a>
+  <nav>
+    <a href="/">Dashboard</a>
+    {{if .Me.IsAdmin}}
+    <a href="/admin/users">Users</a>
+    <a href="/admin/profiles">Profiles</a>
+    <a href="/admin/routers">Routers</a>
+    <a href="/admin/audit">Audit</a>
+    {{end}}
+    <a href="/account">{{.Me.Username}}</a>
+    <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">Sign out</button></form>
+  </nav>
+</header>
+{{end}}
+<main class="{{if .Me}}app{{else}}narrow{{end}}">
+  {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<footer>WG2FA {{.Version}} · WireGuard® is a registered trademark of Jason A. Donenfeld.</footer>
+</body>
+</html>

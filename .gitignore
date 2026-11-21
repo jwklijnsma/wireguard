@@ -1,0 +1,6 @@
+/dist/
+/bin/
+*.dmg
+*.exe
+!packaging/**
+/data/

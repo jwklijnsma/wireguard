@@ -1,0 +1,21 @@
+services:
+  wg2fa:
+    image: ghcr.io/jwklijnsma/wireguard:latest
+    container_name: wg2fa
+    restart: unless-stopped
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]   # only needed for the userspace fallback
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.src_valid_mark: "1"
+    environment:
+      WG2FA_ENDPOINT: vpn.example.nl          # public hostname clients connect to (required)
+      WG2FA_SUBNET: 10.8.0.0/24
+      WG2FA_ISSUER: "My VPN"                  # name shown in authenticator apps
+      # WG2FA_ADMIN_PASSWORD: change-me-now   # otherwise a random one is printed in the log
+      # WG2FA_TRUST_PROXY: "true"             # when behind Traefik/Caddy/nginx
+    ports:
+      - "51820:51820/udp"
+      - "127.0.0.1:8080:8080"   # put a TLS reverse proxy in front, or set WG2FA_TLS_CERT/KEY
+    volumes:
+      - ./data:/data

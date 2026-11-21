@@ -1,0 +1,101 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data}}
+{{if $.Me.IsAdmin}}
+<section class="stats">
+  <div class="stat"><b>{{.Total}}</b><span>peers</span></div>
+  <div class="stat"><b>{{.Active}}</b><span>unlocked</span></div>
+  <div class="stat"><b>{{.Online}}</b><span>online</span></div>
+  <div class="stat"><b>{{.Routers}}</b><span>routers</span></div>
+</section>
+<section class="card">
+  <h2>Server</h2>
+  <dl class="kv">
+    <dt>Endpoint</dt><dd><code>{{.Endpoint}}</code></dd>
+    <dt>VPN subnet</dt><dd><code>{{.Subnet}}</code></dd>
+    <dt>Public key</dt><dd><code class="copy">{{.PublicKey}}</code></dd>
+  </dl>
+</section>
+{{end}}
+
+<section class="card">
+  <div class="row between">
+    <h2>My VPN</h2>
+    {{if .MyProfile}}<span class="tag">{{.MyProfile.Name}}</span>{{end}}
+  </div>
+  {{if .MyProfile}}{{if .MyProfile.Require2FA}}
+  <div class="unlock">
+    <form method="post" action="/vpn/activate" class="row">
+      <input type="hidden" name="csrf" value="{{$csrf}}">
+      <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="2FA code" required class="code">
+      <button class="primary">Unlock VPN ({{.MyProfile.SessionHours}}h)</button>
+    </form>
+    <form method="post" action="/vpn/deactivate"><input type="hidden" name="csrf" value="{{$csrf}}"><button>Lock all my devices</button></form>
+  </div>
+  <p class="muted small">The desktop client (macOS/Windows) unlocks automatically when you sign in. For phones, routers and wg-quick, unlock here.</p>
+  {{end}}{{end}}
+
+  <table>
+    <thead><tr><th>Device</th><th>Address</th><th>Status</th><th>Session</th><th>Handshake</th><th>Traffic</th><th></th></tr></thead>
+    <tbody>
+    {{range .Mine}}
+      <tr>
+        <td><a href="/devices/{{.ID}}">{{.Name}}</a></td>
+        <td><code>{{.Address}}</code></td>
+        <td>{{template "status" .}}</td>
+        <td>{{if .Require2FA}}{{if .Active}}{{until .ActiveUntil}}{{else}}locked{{end}}{{else}}always{{end}}</td>
+        <td>{{since .Stats.LastHandshake}}</td>
+        <td>↓{{bytes .Stats.TX}} ↑{{bytes .Stats.RX}}</td>
+        <td class="actions">
+          <form method="post" action="/devices/{{.ID}}/delete" data-confirm="Delete {{.Name}}?"><input type="hidden" name="csrf" value="{{$csrf}}"><button class="danger small">Delete</button></form>
+        </td>
+      </tr>
+    {{else}}
+      <tr><td colspan="7" class="muted">No devices yet. Install the desktop client, or add a device below for phones / wg-quick.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  <form method="post" action="/devices" class="row">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input name="name" placeholder="New device name, e.g. iPhone" required maxlength="64">
+    <button>Add device (generate config)</button>
+  </form>
+</section>
+
+{{if $.Me.IsAdmin}}
+<section class="card">
+  <h2>All peers</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Kind</th><th>User</th><th>Profile</th><th>Address</th><th>Status</th><th>Endpoint</th><th>Handshake</th><th>Traffic</th><th></th></tr></thead>
+    <tbody>
+    {{range .Peers}}
+      <tr class="{{if not .Enabled}}disabled{{end}}">
+        <td><a href="/devices/{{.ID}}">{{.Name}}</a></td>
+        <td>{{.Kind}}</td>
+        <td>{{.UserName}}</td>
+        <td>{{.ProfileName}}</td>
+        <td><code>{{.Address}}</code>{{range .RemoteSubnets}}<br><code class="muted">{{.}}</code>{{end}}</td>
+        <td>{{template "status" .}}</td>
+        <td><code class="small">{{.Stats.Endpoint}}</code></td>
+        <td>{{since .Stats.LastHandshake}}</td>
+        <td>↓{{bytes .Stats.TX}} ↑{{bytes .Stats.RX}}</td>
+        <td class="actions">
+          <form method="post" action="/admin/peers/{{.ID}}/toggle"><input type="hidden" name="csrf" value="{{$csrf}}"><button class="small">{{if .Enabled}}Disable{{else}}Enable{{end}}</button></form>
+          {{if .Require2FA}}<form method="post" action="/admin/peers/{{.ID}}/revoke"><input type="hidden" name="csrf" value="{{$csrf}}"><button class="small">Revoke</button></form>{{end}}
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "status"}}
+{{if not .Enabled}}<span class="pill off">disabled</span>
+{{else if .Online}}<span class="pill on">online</span>
+{{else if eq .Kind "router"}}<span class="pill ready">always-on</span>
+{{else if .Active}}<span class="pill ready">unlocked</span>
+{{else}}<span class="pill locked">locked</span>{{end}}
+{{end}}

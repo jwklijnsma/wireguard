@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data}}
+<section class="card">
+  <h2>Routers / site-to-site</h2>
+  <p class="muted">Connect branch offices or home networks. Each router gets a tunnel address, the server routes its LAN subnets, and other routers and clients can reach it (add the LANs to a profile's routes for road-warriors). Export ready-made config for MikroTik, OpenWrt, OPNsense/pfSense or wg-quick.</p>
+  <table>
+    <thead><tr><th>Router</th><th>Tunnel</th><th>LANs</th><th>Status</th><th>Endpoint</th><th>Handshake</th><th>Traffic</th><th></th></tr></thead>
+    <tbody>
+    {{range .Routers}}
+      <tr class="{{if not .Enabled}}disabled{{end}}">
+        <td><a href="/devices/{{.ID}}">{{.Name}}</a></td>
+        <td><code>{{.Address}}</code></td>
+        <td>{{range .RemoteSubnets}}<code>{{.}}</code> {{end}}</td>
+        <td>{{template "rstatus" .}}</td>
+        <td><code class="small">{{.Stats.Endpoint}}</code></td>
+        <td>{{since .Stats.LastHandshake}}</td>
+        <td>↓{{bytes .Stats.TX}} ↑{{bytes .Stats.RX}}</td>
+        <td class="actions">
+          <form method="post" action="/admin/peers/{{.ID}}/toggle"><input type="hidden" name="csrf" value="{{$csrf}}"><input type="hidden" name="back" value="routers"><button class="small">{{if .Enabled}}Disable{{else}}Enable{{end}}</button></form>
+          <form method="post" action="/devices/{{.ID}}/delete" data-confirm="Delete router {{.Name}}?"><input type="hidden" name="csrf" value="{{$csrf}}"><input type="hidden" name="back" value="routers"><button class="small danger">Delete</button></form>
+        </td>
+      </tr>
+    {{else}}
+      <tr><td colspan="8" class="muted">No routers yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Add router</h2>
+  <form method="post" action="/admin/routers" class="grid2">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <label>Name <input name="name" required placeholder="Office Heerenveen"></label>
+    <label>LAN subnets behind it <input name="subnets" placeholder="192.168.20.0/24"></label>
+    <label>Profile <select name="profile">{{range .Profiles}}{{if not .Require2FA}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}</select></label>
+    <label>Router public key (optional) <input name="public_key" placeholder="leave empty to generate a key pair"></label>
+    <div><button class="primary">Create router</button></div>
+  </form>
+</section>
+{{end}}
+{{end}}
+{{define "rstatus"}}
+{{if not .Enabled}}<span class="pill off">disabled</span>{{else if .Online}}<span class="pill on">online</span>{{else}}<span class="pill locked">waiting</span>{{end}}
+{{end}}

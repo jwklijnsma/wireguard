@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WG2FA VPN</title>
+<style>
+:root{--bg:#0f1419;--panel:#171d24;--line:#2a333d;--text:#e6e9ed;--muted:#8b97a3;--acc:#88171a;--acc2:#c0262b;--ok:#2ea36b;--warn:#d6a021;--bad:#d64545}
+@media (prefers-color-scheme:light){:root{--bg:#f4f5f7;--panel:#fff;--line:#dde1e6;--text:#1b1f24;--muted:#66717d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:440px;margin:6vh auto;padding:0 1rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.4rem 1.5rem}
+h1{margin:0 0 .2rem;font-size:1.4rem}.logo{color:var(--acc2)}
+.muted{color:var(--muted)}.small{font-size:12px}
+label{display:flex;flex-direction:column;gap:.25rem;margin:.7rem 0;font-size:13px;color:var(--muted)}
+input{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.55rem .7rem}
+input.code{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.3em;font-size:1.25rem;text-align:center}
+button{font:inherit;width:100%;padding:.65rem;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;margin-top:.6rem;font-weight:600}
+button:hover{background:var(--acc2)}button.ghost{background:none;color:var(--text);border-color:var(--line)}
+button:disabled{opacity:.6;cursor:wait}
+.state{display:flex;align-items:center;gap:.6rem;margin:.8rem 0 1rem;font-weight:600;font-size:1.05rem}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--muted)}
+.connected .dot{background:var(--ok);box-shadow:0 0 0 4px rgba(46,163,107,.25)}
+.connecting .dot{background:var(--warn)}.error .dot,.expired .dot{background:var(--bad)}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:0}dt{color:var(--muted)}dd{margin:0;word-break:break-all}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.msg{border-radius:8px;padding:.55rem .8rem;margin:.6rem 0;background:rgba(214,69,69,.12);border:1px solid var(--bad)}
+.warn{background:rgba(214,160,33,.12);border-color:var(--warn)}
+details{margin-top:1rem}summary{cursor:pointer;color:var(--muted)}
+.hidden{display:none}footer{text-align:center;margin-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="card">
+    <h1><span class="logo">◆</span> WG2FA VPN</h1>
+    <div class="state" id="state"><span class="dot"></span><span id="stateText">…</span></div>
+    <div id="msg" class="msg hidden"></div>
+
+    <form id="login" class="hidden" autocomplete="on">
+      <label>Server <input id="server" placeholder="vpn.example.nl" required></label>
+      <label>Username <input id="username" autocomplete="username" required></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+      <label>2FA code <input id="totp" class="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••"></label>
+      <details><summary>Device</summary><label>Device name <input id="device"></label></details>
+      <button id="connectBtn" type="submit">Connect</button>
+    </form>
+
+    <div id="info" class="hidden">
+      <dl>
+        <dt>Profile</dt><dd id="iProfile"></dd>
+        <dt>Address</dt><dd><code id="iAddr"></code></dd>
+        <dt>Server</dt><dd><code id="iEndpoint"></code></dd>
+        <dt>Routes</dt><dd><code id="iRoutes"></code></dd>
+        <dt>DNS</dt><dd><code id="iDNS"></code></dd>
+        <dt>Session</dt><dd id="iExp"></dd>
+        <dt>Handshake</dt><dd id="iHs"></dd>
+        <dt>Traffic</dt><dd id="iTraffic"></dd>
+      </dl>
+      <button id="disconnectBtn" class="ghost" type="button">Disconnect</button>
+    </div>
+  </div>
+  <footer class="muted small">WG2FA client <span id="ver"></span> · device key <code id="pub"></code></footer>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

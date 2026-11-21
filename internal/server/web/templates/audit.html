@@ -1,0 +1,15 @@
+{{define "content"}}
+<section class="card">
+  <h2>Audit log</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Detail</th><th>IP</th></tr></thead>
+    <tbody>
+    {{range .Data}}
+      <tr class="{{if or (eq .Action "web.login.failed") (eq .Action "client.login.failed") (eq .Action "vpn.activate.failed") (eq .Action "web.login.2fa_failed")}}warn{{end}}">
+        <td class="small">{{ts .Time}}</td><td>{{.Actor}}</td><td><code>{{.Action}}</code></td><td>{{.Detail}}</td><td><code class="small">{{.IP}}</code></td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}

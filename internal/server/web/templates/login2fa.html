@@ -1,0 +1,11 @@
+{{define "content"}}
+<div class="card login">
+  <h1>Two-factor</h1>
+  <p class="muted">Enter the 6-digit code from your authenticator app.</p>
+  <form method="post" action="/login/2fa">
+    <label>Code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus class="code"></label>
+    <button class="primary wide">Verify</button>
+  </form>
+  <form method="post" action="/logout"><button class="link">Cancel</button></form>
+</div>
+{{end}}

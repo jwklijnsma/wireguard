@@ -1,0 +1,36 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data}}
+<section class="card">
+  <div class="row between">
+    <h2>{{.Peer.Name}} <span class="tag">{{.Peer.Kind}}</span></h2>
+    <a href="{{if eq .Peer.Kind "router"}}/admin/routers{{else}}/{{end}}">← back</a>
+  </div>
+  <dl class="kv">
+    <dt>Tunnel address</dt><dd><code>{{.Peer.Address}}</code></dd>
+    {{if .Peer.RemoteSubnets}}<dt>LAN subnets</dt><dd><code>{{join .Peer.RemoteSubnets ", "}}</code></dd>{{end}}
+    <dt>Public key</dt><dd><code class="copy">{{.Peer.PublicKey}}</code></dd>
+    <dt>Created</dt><dd>{{ts .Peer.CreatedAt}}</dd>
+    <dt>Last 2FA</dt><dd>{{since .Peer.LastAuth}}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Configuration</h2>
+  {{if not .HasKey}}
+    <p class="muted">This peer uses its own private key (registered by the desktop client or supplied by you). Replace <code>&lt;YOUR-PRIVATE-KEY&gt;</code> with it.</p>
+  {{end}}
+  <div class="tabs">
+    {{$f := .Format}}{{$id := .Peer.ID}}
+    {{range .Formats}}<a href="/devices/{{$id}}?format={{.ID}}" class="{{if eq .ID $f}}active{{end}}">{{.Name}}</a>{{end}}
+  </div>
+  <div class="row top">
+    <pre class="config copy">{{.Config}}</pre>
+    {{if and .HasKey (eq .Format "wgquick")}}<img src="/devices/{{.Peer.ID}}/qr.png" class="qr" alt="Config QR code (scan with WireGuard mobile app)">{{end}}
+  </div>
+  <p><a class="button" href="/devices/{{.Peer.ID}}/config?format={{.Format}}">Download</a></p>
+  {{if eq .Peer.Kind "device"}}<p class="muted small">After importing, unlock the VPN on the dashboard with your 2FA code. The tunnel only passes traffic while the session is unlocked.</p>{{end}}
+  {{if eq .Peer.Kind "router"}}<p class="muted small">Routers are always-on (no 2FA). Protect the router itself; disable it here to cut it off instantly.</p>{{end}}
+</section>
+{{end}}
+{{end}}

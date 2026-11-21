@@ -1,0 +1,11 @@
+{{define "content"}}
+<div class="card login">
+  <h1><span class="logo">◆</span> WG2FA</h1>
+  <p class="muted">WireGuard VPN with two-factor authentication</p>
+  <form method="post" action="/login">
+    <label>Username <input name="username" autocomplete="username" required autofocus></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary wide">Sign in</button>
+  </form>
+</div>
+{{end}}
