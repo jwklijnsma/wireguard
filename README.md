@@ -15,6 +15,20 @@ WireGuard itself has no login step: anyone holding a valid key can connect. WG2F
    routers (MikroTik, OpenWrt, OPNsense, pfSense): always-on site-to-site peers
 ```
 
+## Screenshots
+
+| | |
+|---|---|
+| **Dashboard:** all peers, online status, handshakes, traffic<br>![Dashboard](docs/screenshots/03-dashboard.png) | **Get connected:** self-service guide with client downloads<br>![Get connected](docs/screenshots/04-get-connected.png) |
+| **2FA enrolment:** scan the QR code with any authenticator app<br>![2FA enrolment](docs/screenshots/02-2fa-enrolment.png) | **Sign in:** password, then a 6-digit code<br>![Login 2FA](docs/screenshots/01b-login-2fa.png) |
+| **Desktop client:** sign in with password + 2FA<br>![Client login](docs/screenshots/10-client-login.png) | **Desktop client:** connected<br>![Client connected](docs/screenshots/11-client-connected.png) |
+| **Phone config:** QR code for the WireGuard app<br>![Device QR](docs/screenshots/07-device-qr.png) | **Users:** profiles, roles, 2FA status and resets<br>![Users](docs/screenshots/05-users.png) |
+| **VPN profiles:** routes, DNS, session length, 2FA required<br>![Profiles](docs/screenshots/06-profiles.png) | **Routers:** site-to-site peers with their LANs<br>![Routers](docs/screenshots/08-routers.png) |
+| **Router export:** MikroTik / OpenWrt / OPNsense / wg-quick<br>![MikroTik export](docs/screenshots/09-router-mikrotik.png) | **Audit log:** logins, 2FA failures, changes<br>![Audit](docs/screenshots/12-audit.png) |
+| **Light mode:** follows the system setting<br>![Light mode](docs/screenshots/13-dashboard-light.png) | **Login**<br>![Login](docs/screenshots/01-login.png) |
+
+<sub>Screenshots come from a throwaway demo instance; all keys shown are demo keys.</sub>
+
 ## Features
 
 - **2FA everywhere.** TOTP (RFC 6238) works with Google/Microsoft Authenticator, Authy, 1Password and Bitwarden. Enrolment uses a QR code. Codes can't be replayed, and failed logins are rate-limited. Admins must enrol.
