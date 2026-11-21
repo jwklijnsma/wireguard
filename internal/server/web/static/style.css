@@ -62,3 +62,16 @@ pre.config{white-space:pre-wrap;word-break:break-all;background:var(--bg);border
 .copy{cursor:copy}
 .copied{outline:2px solid var(--ok)}
 @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+.intro h1{margin:.1rem 0 .3rem;font-size:1.5rem}
+.step{display:flex;gap:1.1rem;align-items:flex-start}
+.stepnum{flex:0 0 2.2rem;height:2.2rem;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.step.done .stepnum{background:var(--ok)}
+.stepbody{flex:1;min-width:0}
+.stepbody h3{font-size:.95rem;margin:.2rem 0 .4rem}
+.platforms{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}
+.platform{border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem}
+.platform.hl{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+a.dl{display:flex;gap:.6rem;align-items:baseline;border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;margin:.35rem 0;color:var(--text)}
+a.dl:hover{border-color:var(--muted);text-decoration:none}
+a.dl.hl{border-color:var(--acc2);background:rgba(192,38,43,.08)}
+a.button.primary{background:var(--acc);border-color:var(--acc);color:#fff}

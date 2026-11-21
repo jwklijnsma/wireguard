@@ -163,6 +163,8 @@ func (s *Server) routes() http.Handler {
 		m.Handle(p, s.auth(true, h))
 	}
 	user("GET /{$}", s.dashboard)
+	user("GET /connect", s.connectPage)
+	user("GET /downloads/{file}", s.download)
 	user("GET /account", s.accountPage)
 	user("POST /account/password", s.accountPassword)
 	user("POST /account/2fa/start", s.totpStart)
@@ -238,7 +240,7 @@ func (s *Server) auth(adminOnly bool, h func(http.ResponseWriter, *http.Request,
 			http.Error(w, "invalid CSRF token, reload the page", http.StatusForbidden)
 			return
 		}
-		if enrol && !strings.HasPrefix(r.URL.Path, "/account") {
+		if enrol && !strings.HasPrefix(r.URL.Path, "/account") && r.URL.Path != "/connect" {
 			redirect(w, r, "/account", "Set up two-factor authentication before continuing.")
 			return
 		}
@@ -297,7 +299,7 @@ func (s *Server) loginPost(w http.ResponseWriter, r *http.Request) {
 	s.limit.reset(key)
 	_ = s.store.Update(func(st *state) error { st.audit(u.Username, "web.login", "password only", ip); return nil })
 	s.setSessionCookie(w, r, s.sess.create(u.ID, false, webTTL))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, s.landing(u.ID), http.StatusSeeOther)
 }
 
 func (s *Server) login2FAPage(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +346,7 @@ func (s *Server) login2FAPost(w http.ResponseWriter, r *http.Request) {
 	s.limit.reset(key)
 	s.sess.delete(tok)
 	s.setSessionCookie(w, r, s.sess.create(ws.UserID, false, webTTL))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, s.landing(ws.UserID), http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -361,12 +363,13 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 type peerRow struct {
 	Peer
-	UserName    string
-	ProfileName string
-	Require2FA  bool
-	Active      bool
-	Stats       PeerStats
-	Online      bool
+	UserName      string
+	ProfileName   string
+	Require2FA    bool
+	Active        bool
+	Stats         PeerStats
+	Online        bool
+	HasPrivateKey bool
 }
 
 func (s *Server) rows(st *state, filter func(*Peer) bool) []peerRow {
@@ -378,6 +381,7 @@ func (s *Server) rows(st *state, filter func(*Peer) bool) []peerRow {
 			continue
 		}
 		row := peerRow{Peer: *p, Active: st.isActive(p, now), Stats: stats[p.PublicKey]}
+		row.HasPrivateKey = p.PrivateKey != ""
 		row.PrivateKey, row.TokenHash = "", ""
 		if u := st.user(p.UserID); u != nil {
 			row.UserName = u.Username

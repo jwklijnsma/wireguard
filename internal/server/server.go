@@ -32,6 +32,7 @@ type Config struct {
 	Issuer        string // name shown in authenticator apps
 	TrustProxy    bool   // honour X-Forwarded-For / X-Forwarded-Proto
 	Version       string
+	DownloadDirs  []string // client installers offered on the "Get connected" page
 }
 
 type Server struct {

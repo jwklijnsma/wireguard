@@ -1,0 +1,111 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{with .Data}}{{$os := .OS}}
+<section class="card intro">
+  <h1>Get connected</h1>
+  <p class="muted">Three steps: secure your account with 2FA, install the app for your device, and sign in. {{if $os}}We detected <b>{{$os}}</b>; the matching option is highlighted.{{end}}</p>
+</section>
+
+<section class="card step {{if .TwoFA}}done{{end}}">
+  <div class="stepnum">1</div>
+  <div class="stepbody">
+    <h2>Two-factor authentication {{if .TwoFA}}<span class="pill on">done</span>{{end}}</h2>
+    {{if .TwoFA}}
+      <p class="muted">Your authenticator app is linked. You'll enter its 6-digit code every time you connect.</p>
+    {{else}}
+      <p>Install an authenticator app on your phone (Microsoft Authenticator, Google Authenticator, Authy, 1Password, Bitwarden…), then scan the QR code we show you.</p>
+      <p><a class="button primary" href="/account">Set up 2FA</a></p>
+    {{end}}
+  </div>
+</section>
+
+<section class="card step">
+  <div class="stepnum">2</div>
+  <div class="stepbody">
+    <h2>Install the app</h2>
+    <div class="platforms">
+      <div class="platform {{if or (eq $os "macOS") (eq $os "Windows") (eq $os "Linux")}}hl{{end}}">
+        <h3>💻 Computer</h3>
+        <p class="muted small">The WG2FA app signs you in with your password and 2FA code and connects automatically.</p>
+        {{range .Downloads}}
+          <a class="dl {{if eq .Platform $os}}hl{{end}}" href="/downloads/{{.Name}}">
+            <b>{{.Platform}}</b> <span>{{.Detail}}</span> <span class="muted small">{{.Size}}</span>
+          </a>
+        {{else}}
+          <p class="muted small">No installers are published on this server yet — ask your administrator. (Admins: place release files in <code>/data/downloads</code>.)</p>
+        {{end}}
+        <p class="small">In the app, use server <code class="copy">{{.ServerURL}}</code> and your username <code>{{$.Me.Username}}</code>.</p>
+        {{if eq $os "macOS"}}<p class="muted small">macOS: open the DMG, drag WG2FA to Applications and start it; it asks once for your Mac password to install the VPN service. If macOS blocks it, right-click the app → Open.</p>{{end}}
+        {{if eq $os "Windows"}}<p class="muted small">Windows: run the setup, accept the administrator prompt, the app opens in your browser when done.</p>{{end}}
+      </div>
+
+      <div class="platform {{if or (eq $os "iOS") (eq $os "Android")}}hl{{end}}">
+        <h3>📱 Phone / tablet</h3>
+        <p class="muted small">Use the official WireGuard app and scan your personal config.</p>
+        <p class="row">
+          <a class="button {{if eq $os "iOS"}}primary{{end}}" href="https://apps.apple.com/app/wireguard/id1441195209" rel="noopener" target="_blank">App Store</a>
+          <a class="button {{if eq $os "Android"}}primary{{end}}" href="https://play.google.com/store/apps/details?id=com.wireguard.android" rel="noopener" target="_blank">Google Play</a>
+        </p>
+        {{if .MustEnrol}}<p class="muted small">Finish step 1 (2FA) first, then create your config here.</p>{{else}}
+        <form method="post" action="/devices" class="row">
+          <input type="hidden" name="csrf" value="{{$csrf}}">
+          <input name="name" placeholder="Device name, e.g. iPhone Jan" required maxlength="64">
+          <button class="primary">Create config + QR</button>
+        </form>
+        {{end}}
+        <p class="muted small">On the next page, scan the QR code in the WireGuard app (＋ → Create from QR code), or download the <code>.conf</code> file.</p>
+      </div>
+
+      <div class="platform">
+        <h3>🛠 Other (wg-quick, routers)</h3>
+        <p class="muted small">Create a config the same way and download it as a <code>.conf</code> file for any WireGuard client.</p>
+        {{if .MustEnrol}}<p class="muted small">Available after step 1.</p>{{else}}
+        <form method="post" action="/devices" class="row">
+          <input type="hidden" name="csrf" value="{{$csrf}}">
+          <input name="name" placeholder="Device name" required maxlength="64">
+          <button>Create config</button>
+        </form>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card step {{if .Unlocked}}done{{end}}">
+  <div class="stepnum">3</div>
+  <div class="stepbody">
+    <h2>Connect {{if .Unlocked}}<span class="pill on">unlocked · {{until .SessionEnd}}</span>{{end}}</h2>
+    <p><b>Computer app:</b> enter your password and 2FA code in the app and click Connect.</p>
+    {{if .Require2FA}}
+    <p><b>Phone / config file:</b> unlock with a fresh 2FA code here, then switch the tunnel on in the WireGuard app. It stays unlocked for {{if .Profile}}{{.Profile.SessionHours}}{{end}} hours.</p>
+    {{if .TwoFA}}
+    <form method="post" action="/vpn/activate" class="row">
+      <input type="hidden" name="csrf" value="{{$csrf}}">
+      <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="2FA code" required class="code" autocomplete="one-time-code">
+      <button class="primary">Unlock VPN</button>
+    </form>
+    {{end}}
+    {{else}}
+    <p class="muted">Your profile does not require a 2FA unlock; configs work immediately.</p>
+    {{end}}
+
+    {{if .Devices}}
+    <h3>My devices</h3>
+    <table>
+      <thead><tr><th>Device</th><th>Address</th><th>Status</th><th>Config</th></tr></thead>
+      <tbody>
+      {{range .Devices}}
+        <tr>
+          <td><a href="/devices/{{.ID}}">{{.Name}}</a></td>
+          <td><code>{{.Address}}</code></td>
+          <td>{{if not .Enabled}}<span class="pill off">disabled</span>{{else if .Online}}<span class="pill on">online</span>{{else if .Active}}<span class="pill ready">unlocked</span>{{else}}<span class="pill locked">locked</span>{{end}}</td>
+          <td>{{if .HasPrivateKey}}<a href="/devices/{{.ID}}">QR</a> · <a href="/devices/{{.ID}}/config">.conf</a>{{else}}<span class="muted small">desktop app</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{end}}
+  </div>
+</section>
+{{end}}
+{{end}}

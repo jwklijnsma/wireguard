@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 
@@ -59,6 +60,7 @@ func main() {
 	}
 	c.AdminPassword = os.Getenv("WG2FA_ADMIN_PASSWORD")
 	c.Version = version
+	c.DownloadDirs = filepath.SplitList(env("WG2FA_DOWNLOADS", "/data/downloads"+string(filepath.ListSeparator)+"/usr/share/wg2fa/downloads"))
 
 	s, err := server.New(c)
 	if err != nil {

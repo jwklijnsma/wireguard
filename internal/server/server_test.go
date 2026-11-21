@@ -7,6 +7,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -180,5 +182,62 @@ func TestCSRFRequired(t *testing.T) {
 	r, _ := c.PostForm(ts.URL+"/account/2fa/start", url.Values{})
 	if r.StatusCode != 403 {
 		t.Fatalf("missing csrf should be 403, got %d", r.StatusCode)
+	}
+}
+
+func TestConnectPageAndDownloads(t *testing.T) {
+	s, ts := newTestServer(t)
+	dir := t.TempDir()
+	s.cfg.DownloadDirs = []string{dir}
+	os.WriteFile(filepath.Join(dir, "WG2FA-v1.0.0-macos-universal.dmg"), []byte("dmg"), 0o644)
+	os.WriteFile(filepath.Join(dir, "WG2FA-1.0.0-windows-x64-setup.exe"), []byte("exe"), 0o644)
+	os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("no"), 0o644)
+
+	// a regular user on a profile without 2FA requirement, no devices yet
+	s.store.Update(func(st *state) error {
+		var prof string
+		for _, p := range st.Profiles {
+			if !p.Require2FA {
+				prof = p.ID
+			}
+		}
+		st.Users = append(st.Users, &User{ID: "u2", Username: "jan", PassHash: HashPassword("jan-password-1"), ProfileID: prof})
+		return nil
+	})
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	req, _ := http.NewRequest("POST", ts.URL+"/login", strings.NewReader("username=jan&password=jan-password-1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Request.URL.Path != "/connect" {
+		t.Fatalf("new user should land on /connect, got %s", res.Request.URL.Path)
+	}
+	var b bytes.Buffer
+	b.ReadFrom(res.Body)
+	html := b.String()
+	for _, want := range []string{"macos-universal.dmg", "windows-x64-setup.exe", "We detected <b>macOS</b>", ts.URL} {
+		if !strings.Contains(html, want) {
+			t.Errorf("connect page missing %q", want)
+		}
+	}
+	if strings.Contains(html, "secret.txt") {
+		t.Error("non-installer file listed")
+	}
+	r, _ := c.Get(ts.URL + "/downloads/WG2FA-v1.0.0-macos-universal.dmg")
+	if r.StatusCode != 200 || r.Header.Get("Content-Disposition") == "" {
+		t.Fatalf("download failed: %d", r.StatusCode)
+	}
+	for _, bad := range []string{"secret.txt", "..%2fstate.json", "%2e%2e%2fsecret.txt"} {
+		if r, _ := c.Get(ts.URL + "/downloads/" + bad); r.StatusCode == 200 {
+			t.Fatalf("%s should not be downloadable", bad)
+		}
+	}
+	// anonymous users can't download
+	if r, _ := http.Get(ts.URL + "/downloads/WG2FA-v1.0.0-macos-universal.dmg"); r.Request.URL.Path != "/login" {
+		t.Fatal("download must require login")
 	}
 }

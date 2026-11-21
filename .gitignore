@@ -4,3 +4,5 @@
 *.exe
 !packaging/**
 /data/
+/packaging/downloads/*
+!/packaging/downloads/README.md

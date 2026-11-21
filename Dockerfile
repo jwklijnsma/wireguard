@@ -13,6 +13,7 @@ RUN go mod tidy \
 FROM alpine:3.22
 RUN apk add --no-cache wireguard-tools iproute2 iptables ca-certificates tzdata
 COPY --from=build /out/wg2fa-server /out/wireguard-go /usr/local/bin/
+COPY packaging/downloads/ /usr/share/wg2fa/downloads/
 COPY packaging/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENV WG2FA_DATA=/data WG2FA_LISTEN=:8080 WG2FA_WG_PORT=51820 WG2FA_SUBNET=10.8.0.0/24

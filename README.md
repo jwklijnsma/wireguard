@@ -21,6 +21,7 @@ WireGuard itself has no login step: anyone holding a valid key can connect. WG2F
 - **VPN sessions.** A device is unlocked for the profile's session length (default 12 h), then it is removed from WireGuard automatically. Admins can revoke a session or disable a device instantly.
 - **VPN profiles.** Each profile sets its routes (full or split tunnel), DNS, MTU, keepalive, session length, and whether 2FA is required.
 - **Routers and site-to-site.** Add a router with its LAN subnets. The server routes them, and other routers reach them too. Configs export to **MikroTik RouterOS 7**, **OpenWrt UCI**, **OPNsense/pfSense** and **wg-quick**.
+- **Self-service portal ("Get connected").** Users enrol 2FA with a QR code and download the desktop client for their OS (detected automatically; the installers ship inside the Docker image). They can also create a phone config with a QR code for the WireGuard app, download `.conf` files, and unlock the VPN with a 2FA code.
 - **Web GUI.** It has a dashboard (online, handshake, traffic), users, profiles, routers, an audit log, and self-service devices with QR codes for the mobile WireGuard apps.
 - **Desktop clients.** The macOS `.dmg` (universal) and Windows `setup.exe` (x64 and arm64) embed wireguard-go, so they need no separate WireGuard install. Sign in with password and 2FA code, then connect.
 - **Single static binary.** The server is a Go binary plus a JSON state file. It ships as a multi-arch Docker image (amd64 and arm64).
@@ -61,6 +62,7 @@ The kernel WireGuard module is used when the host has it. Otherwise the image fa
 | `WG2FA_TRUST_PROXY` | `false` | Honour `X-Forwarded-For/-Proto` |
 | `WG2FA_NAT` | `1` | MASQUERADE VPN traffic to the default interface |
 | `WG2FA_MTU` | `1420` | Interface MTU |
+| `WG2FA_DOWNLOADS` | `/data/downloads:/usr/share/wg2fa/downloads` | Folders whose client installers are offered on *Get connected*. Files in `/data/downloads` override the bundled ones, e.g. your own signed builds |
 | `WG2FA_DRYRUN` | `false` | Don't touch WireGuard (GUI development) |
 
 All state (keys, users, peers, audit) lives in `/data/state.json` (mode 0600). Back it up.
@@ -68,6 +70,7 @@ All state (keys, users, peers, audit) lives in `/data/state.json` (mode 0600). B
 ## Using it
 
 1. **Admin:** sign in, scan the QR code to enrol 2FA, and create users (each user gets a profile).
+   Send users the server URL. On first login they land on **Get connected** (`/connect`), which walks them through 2FA, downloading the right app or phone config, and connecting.
 2. **macOS:** open the DMG, drag *WG2FA* to Applications and start it. It asks once for an admin password to install the VPN service. Then enter server, username, password and 2FA code, and click Connect.
 3. **Windows:** run `WG2FA-…-setup.exe`. It installs the service and opens the client. Sign in the same way.
 4. **Phones / wg-quick:** on the dashboard, use *Add device*, then scan the QR code with the WireGuard app. Before connecting, unlock the VPN on the dashboard with your 2FA code.
