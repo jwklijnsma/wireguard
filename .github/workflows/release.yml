@@ -21,7 +21,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: go mod tidy && go vet ./... && go test ./...
@@ -30,7 +30,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: Build Linux binaries
@@ -54,7 +54,7 @@ jobs:
     needs: [test, linux, macos, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: packaging/downloads
@@ -93,7 +93,7 @@ jobs:
     needs: test
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: go mod tidy
@@ -135,7 +135,7 @@ jobs:
           - { goarch: amd64, arch: x64, allowed: x64compatible }
           - { goarch: arm64, arch: arm64, allowed: arm64 }
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: Build client
