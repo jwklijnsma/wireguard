@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: packaging/downloads
           pattern: '[lmw]*'
@@ -175,7 +175,7 @@ jobs:
     needs: [linux, docker, macos, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: '[lmw]*'   # linux, macos, windows-* (skips docker build records)
