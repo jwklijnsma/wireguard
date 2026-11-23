@@ -239,7 +239,7 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         if: ${{ env.COSIGN_PRIVATE_KEY != '' }}
         run: cosign sign-blob --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false --output-signature dist/SHA256SUMS.txt.sig dist/SHA256SUMS.txt
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ env.VERSION }}
           name: WG2FA ${{ env.VERSION }}
