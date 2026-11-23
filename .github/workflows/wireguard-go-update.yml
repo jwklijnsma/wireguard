@@ -1,0 +1,142 @@
+name: wireguard-go update
+# Daily: when https://git.zx2c4.com/wireguard-go has a release tag newer than
+# the golang.zx2c4.com/wireguard version in go.mod, open a PR that bumps it,
+# run CI on it and merge it. The merge then starts "Auto release".
+# If CI fails, the PR stays open for review.
+#
+# PRs and pushes made with GITHUB_TOKEN don't start other workflows, so this
+# workflow calls ci.yml itself and dispatches auto-release.yml after merging.
+on:
+  schedule:
+    - cron: '17 5 * * *'   # 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wireguard-go-update
+  cancel-in-progress: false
+
+env:
+  MODULE: golang.zx2c4.com/wireguard
+  UPSTREAM: https://git.zx2c4.com/wireguard-go
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      branch: ${{ steps.pr.outputs.branch }}
+      pr: ${{ steps.pr.outputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Find newest wireguard-go release
+        id: check
+        run: |
+          # tags look like 0.0.20250522 (older ones have a v prefix)
+          tag="$(git ls-remote --tags --refs "$UPSTREAM" \
+            | awk -F'refs/tags/' '{print $2}' \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | awk '{s=$0; sub(/^v/,"",s); print s, $0}' \
+            | sort -V -k1,1 | tail -n1 | cut -d' ' -f2)"
+          [ -n "$tag" ] || { echo "::error::no release tags found at $UPSTREAM"; exit 1; }
+
+          cur="$(go list -mod=mod -m -json "$MODULE")"
+          new="$(go list -mod=mod -m -json "$MODULE@$tag")"
+          cur_v="$(jq -r .Version <<<"$cur")"; cur_t="$(jq -r .Time <<<"$cur")"
+          new_v="$(jq -r .Version <<<"$new")"; new_t="$(jq -r .Time <<<"$new")"
+          echo "go.mod:         $cur_v ($cur_t)"
+          echo "latest release: $tag = $new_v ($new_t)"
+
+          # only move forward: go.mod may already track a newer master commit
+          if [ "$(date -d "$new_t" +%s)" -le "$(date -d "$cur_t" +%s)" ]; then
+            echo "Up to date." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "tag=$tag"
+            echo "old=$cur_v"
+            echo "new=$new_v"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update go.mod and open PR
+        id: pr
+        if: steps.check.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
+          OLD: ${{ steps.check.outputs.old }}
+          NEW: ${{ steps.check.outputs.new }}
+        run: |
+          go get "$MODULE@$TAG"
+          go mod tidy
+          go build ./...
+
+          branch="deps/wireguard-go-$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add go.mod
+          git commit -m "fix(deps): update wireguard-go to $TAG" \
+            -m "$MODULE $OLD -> $NEW" -m "Release: $UPSTREAM/tag/?h=$TAG"
+          git push --force origin "$branch"
+
+          pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          if [ -z "$pr" ]; then
+            url="$(gh pr create --base main --head "$branch" \
+              --title "fix(deps): update wireguard-go to $TAG" \
+              --body "Automatic update of \`$MODULE\` to the new wireguard-go release **$TAG**.
+
+          | | Version |
+          |---|---|
+          | from | \`$OLD\` |
+          | to | \`$NEW\` |
+
+          Changes: $UPSTREAM/log/?h=$TAG
+
+          CI runs from the *wireguard-go update* workflow; the PR is merged automatically when it passes.")"
+            pr="${url##*/}"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "Opened PR #$pr for wireguard-go $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  ci:
+    needs: update
+    if: needs.update.outputs.branch != ''
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.update.outputs.branch }}
+
+  merge:
+    needs: [update, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write   # to dispatch auto-release.yml
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ needs.update.outputs.pr }}
+      BRANCH: ${{ needs.update.outputs.branch }}
+    steps:
+      - name: Merge PR
+        run: |
+          gh api -X PUT "repos/$GH_REPO/pulls/$PR/merge" -f merge_method=merge --jq .message
+          gh api -X DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH" || true
+      - name: Start release
+        run: |
+          if gh workflow view auto-release.yml >/dev/null 2>&1; then
+            gh workflow run auto-release.yml --ref main
+          else
+            echo "::warning::auto-release.yml not found; no release started"
+          fi
