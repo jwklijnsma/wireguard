@@ -48,7 +48,7 @@ jobs:
             cp README.md docker-compose.yml $d/
             tar czf dist/$d.tar.gz $d
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with: { name: linux, path: dist/* }
 
   docker:
@@ -128,7 +128,7 @@ jobs:
         run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "${IMAGE}@${{ steps.build.outputs.digest }}"
       - name: Record digest
         run: echo "${IMAGE}@${{ steps.build.outputs.digest }}" > image-digest.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with: { name: image-digest, path: image-digest.txt }
 
   macos:
@@ -165,7 +165,7 @@ jobs:
         run: |
           xcrun notarytool submit dist/*.dmg --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
           xcrun stapler staple dist/*.dmg
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with: { name: macos, path: dist/*.dmg }
 
   windows:
@@ -206,7 +206,7 @@ jobs:
           & $iscc "/DAppVersion=$v" "/DArch=${{ matrix.arch }}" "/DArchAllowed=${{ matrix.allowed }}" "/DSrcDir=..\..\dist\windows-${{ matrix.goarch }}" "/DOutDir=..\..\dist" packaging\windows\wg2fa.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -Path "dist/windows-${{ matrix.goarch }}/*" -DestinationPath "dist/WG2FA-$env:VERSION-windows-${{ matrix.arch }}-portable.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-${{ matrix.arch }}
           path: |
