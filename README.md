@@ -61,6 +61,8 @@ vpn.example.nl {
 
 Set `WG2FA_TRUST_PROXY=true` when running behind a proxy. Alternatively, set `WG2FA_TLS_CERT` / `WG2FA_TLS_KEY` and expose 8080 directly. Then open UDP **51820** on your firewall.
 
+Prefer Podman? [`packaging/podman`](packaging/podman/README.md) has a Quadlet unit that runs the same container as a systemd service (`wg2fa.service`), with auto-updates.
+
 The kernel WireGuard module is used when the host has it. Otherwise the image falls back to the bundled userspace `wireguard-go`, which needs `/dev/net/tun`.
 
 ### Configuration
