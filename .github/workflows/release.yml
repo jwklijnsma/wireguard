@@ -79,7 +79,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }}
             type=raw,value=latest
       # 1) build amd64 locally and scan it BEFORE anything is published
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
@@ -99,7 +99,7 @@ jobs:
           output-format: table
       # 2) multi-arch build + push with SBOM and max provenance
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
