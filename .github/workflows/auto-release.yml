@@ -1,0 +1,57 @@
+name: Auto release
+# Every push to main gets the next version (see .github/scripts/next-version.sh)
+# and runs the full Release workflow: tests, DMG, Windows installers,
+# Linux tarballs, scanned + signed Docker image and the GitHub release.
+# Pushes that only touch CI/docs, or whose commit says [skip release], are skipped.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump (auto = from commit messages)'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: read
+
+# one release at a time; a newer push waits and includes all earlier commits
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0   # tags + history for the version calculation
+      - id: next
+        env:
+          BUMP: ${{ inputs.bump || 'auto' }}
+        run: |
+          v="$(bash .github/scripts/next-version.sh)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ -n "$v" ]; then
+            echo "### Releasing $v" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### No release needed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  release:
+    needs: version
+    if: needs.version.outputs.version != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write

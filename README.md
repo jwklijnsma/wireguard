@@ -105,7 +105,15 @@ The desktop client UI runs locally at <http://127.0.0.1:51821>. It accepts only 
 
 ## Releases (automatic)
 
-Push a tag and GitHub Actions builds and publishes everything:
+Every push to `main` is released automatically (workflow *Auto release*). The next version follows the commit messages since the last tag:
+
+| Commits since last release | Bump |
+|---|---|
+| `feat:` / `feat(scope):` (also as PR title in a merge commit) | minor: `v1.2.0` → `v1.3.0` |
+| `type!:` or `BREAKING CHANGE` | major (minor while on `0.x`) |
+| anything else | patch: `v1.2.0` → `v1.2.1` |
+
+No release is made when only CI, docs or Renovate config changed (`.github/`, `docs/`, `*.md`, `renovate.json`), or when the commit message contains `[skip release]`. To force a release, use *Actions → Auto release → Run workflow* and pick `patch`, `minor` or `major`. Pushing a tag by hand still works too:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
