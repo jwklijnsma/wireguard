@@ -90,7 +90,7 @@ jobs:
           tags: wg2fa-scan:${{ github.sha }}
           cache-from: type=gha
       - name: Vulnerability scan (fails on fixable High/Critical)
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7
         with:
           image: wg2fa-scan:${{ github.sha }}
           severity-cutoff: high
