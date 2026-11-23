@@ -16,7 +16,10 @@ Write an encrypted backup. It uses `WG2FA_BACKUP_KEY`, or the state key when tha
 
     ```bash
     sudo podman exec wg2fa wg2fa-server backup /data/backup-$(date +%F).enc
+    sudo cp "$(sudo podman volume inspect wg2fa-data --format '{{.Mountpoint}}')"/backup-*.enc .
     ```
+
+    Also keep a copy of the state key: `sudo podman secret inspect --showsecret --format '{{.SecretData}}' wg2fa_state_key`.
 
 Copy the file off the host. Store the backup key separately from the backups.
 

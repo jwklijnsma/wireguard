@@ -1,12 +1,26 @@
 # Releases
 
-Push a tag and GitHub Actions builds and publishes everything:
+Every push to `main` is released automatically by the *Auto release* workflow. It works out the next version from the commit messages since the last tag, then runs the *Release* workflow: tests, client builds, the scanned and signed Docker image, and the GitHub release.
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+| Commits since last release | Bump |
+|---|---|
+| `feat:` / `feat(scope):` (also as PR title in a merge commit) | minor: `v1.2.0` → `v1.3.0` |
+| `type!:` or `BREAKING CHANGE` | major (minor while on `0.x`) |
+| anything else | patch: `v1.2.0` → `v1.2.1` |
 
-You can also start a release from *Actions → Release → Run workflow* with a version.
+No release is made when:
+
+- only CI, docs or Renovate config changed (`.github/`, `docs/`, `*.md`, `renovate.json`, `LICENSE`), or
+- the commit message contains `[skip release]`.
+
+## Manual releases
+
+- **Force a bump:** *Actions → Auto release → Run workflow* and pick `patch`, `minor` or `major`.
+- **Exact version:** *Actions → Release → Run workflow* with a version, or push a tag:
+
+    ```bash
+    git tag v1.0.0 && git push origin v1.0.0
+    ```
 
 ## What a release contains
 
@@ -16,9 +30,11 @@ You can also start a release from *Actions → Release → Run workflow* with a 
 - Docker image `ghcr.io/jwklijnsma/wireguard:1.0.0`, `:1.0` and `:latest` (multi-arch, scanned, signed)
 - `SHA256SUMS.txt`
 
+Podman installs with `AutoUpdate=registry` pick up the new `:latest` image through `podman-auto-update.timer`.
+
 ## wireguard-go updates
 
-The *wireguard-go update* workflow checks [git.zx2c4.com/wireguard-go](https://git.zx2c4.com/wireguard-go) daily. When a release newer than the version in `go.mod` appears, it opens a `fix(deps)` PR, runs CI on it and merges it when CI passes.
+The *wireguard-go update* workflow checks [git.zx2c4.com/wireguard-go](https://git.zx2c4.com/wireguard-go) daily. When a release newer than the version in `go.mod` appears, it opens a `fix(deps)` PR, runs CI on it and merges it when CI passes. The merge then triggers a patch release.
 
 ## macOS signing (optional)
 

@@ -18,7 +18,8 @@ cmd/wg2fa-client      desktop client entry point
 internal/server       store, auth, 2FA flow, wg reconciler, web GUI, API, router exports
 internal/client       wireguard-go tunnel, OS network config (darwin/windows/linux), services, local UI
 internal/totp         RFC 6238 TOTP (stdlib only)
-packaging/            Docker entrypoint, Podman Quadlet, macOS app/DMG, Windows Inno Setup
+packaging/            Docker entrypoint, macOS app/DMG, Windows Inno Setup
+deploy/podman/        Podman Quadlet units + install.sh (systemd)
 docs/                 this site (MkDocs Material)
 ```
 
