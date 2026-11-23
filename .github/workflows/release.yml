@@ -23,8 +23,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
         with: { go-version-file: go.mod }
       - run: go mod tidy && go vet ./... && go test ./...
 
@@ -32,8 +32,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
         with: { go-version-file: go.mod }
       - name: Build Linux binaries
         run: |
@@ -56,8 +56,8 @@ jobs:
     needs: [test, linux, macos, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: packaging/downloads
           pattern: '[lmw]*'
@@ -90,7 +90,7 @@ jobs:
           tags: wg2fa-scan:${{ github.sha }}
           cache-from: type=gha
       - name: Vulnerability scan (fails on fixable High/Critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
         with:
           image: wg2fa-scan:${{ github.sha }}
           severity-cutoff: high
@@ -113,7 +113,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       # Keyless signing writes the image name to the public Rekor log, so it is
       # only used for public repositories. Private repos sign with a key pair
       # (secrets COSIGN_PRIVATE_KEY / COSIGN_PASSWORD) and skip the public log.
@@ -135,8 +135,8 @@ jobs:
     needs: test
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
         with: { go-version-file: go.mod }
       - run: go mod tidy
       - name: Import Developer ID certificate (optional)
@@ -177,8 +177,8 @@ jobs:
           - { goarch: amd64, arch: x64, allowed: x64compatible }
           - { goarch: arm64, arch: arm64, allowed: arm64 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
         with: { go-version-file: go.mod }
       - name: Build client
         shell: bash
@@ -217,12 +217,12 @@ jobs:
     needs: [linux, docker, macos, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: dist
           pattern: '[lmw]*'   # linux, macos, windows-* (skips docker build records)
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with: { name: image-digest, path: digest }
       - id: digest
         run: echo "ref=$(cat digest/image-digest.txt)" >> "$GITHUB_OUTPUT"
@@ -232,7 +232,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: 'dist/*'
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Sign checksums (key, optional)
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
