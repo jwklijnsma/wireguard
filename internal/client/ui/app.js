@@ -27,7 +27,7 @@ function render(s){
   $('info').classList.toggle('hidden', !up);
   if (up) {
     $('iProfile').textContent = s.profile||'-'; $('iAddr').textContent = s.address; $('iEndpoint').textContent = s.endpoint;
-    $('iRoutes').textContent = (s.routes||[]).join(', '); $('iDNS').textContent = (s.dns||[]).join(', ')||'-';
+    $('iRoutes').textContent = (s.routes||[]).join(', '); $('iDNS').textContent = (s.dns||[]).join(', ')||'-'; $('iV6').textContent = s.ipv6||'-';
     $('iExp').textContent = left(s.expires_at); $('iHs').textContent = ago(s.handshake);
     $('iTraffic').textContent = '↓ '+bytes(s.rx)+'  ↑ '+bytes(s.tx);
   }

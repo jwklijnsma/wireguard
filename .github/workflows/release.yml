@@ -12,6 +12,8 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write       # keyless signing / provenance
+  attestations: write
 
 env:
   VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
@@ -76,18 +78,58 @@ jobs:
             type=semver,pattern={{version}},value=${{ env.VERSION }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }}
             type=raw,value=latest
+      # 1) build amd64 locally and scan it BEFORE anything is published
       - uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          build-args: VERSION=${{ env.VERSION }}
+          tags: wg2fa-scan:${{ github.sha }}
+          cache-from: type=gha
+      - name: Vulnerability scan (fails on fixable High/Critical)
+        uses: anchore/scan-action@v6
+        with:
+          image: wg2fa-scan:${{ github.sha }}
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+      # 2) multi-arch build + push with SBOM and max provenance
+      - id: build
+        uses: docker/build-push-action@v6
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          sbom: true
+          provenance: mode=max
           build-args: VERSION=${{ env.VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: sigstore/cosign-installer@v3
+      # Keyless signing writes the image name to the public Rekor log, so it is
+      # only used for public repositories. Private repos sign with a key pair
+      # (secrets COSIGN_PRIVATE_KEY / COSIGN_PASSWORD) and skip the public log.
+      - name: Sign image (keyless, public repo)
+        if: ${{ !github.event.repository.private }}
+        run: cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+      - name: Sign image (key, private repo)
+        if: ${{ github.event.repository.private && env.COSIGN_PRIVATE_KEY != '' }}
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "${IMAGE}@${{ steps.build.outputs.digest }}"
+      - name: Record digest
+        run: echo "${IMAGE}@${{ steps.build.outputs.digest }}" > image-digest.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: image-digest, path: image-digest.txt }
 
   macos:
     needs: test
@@ -180,7 +222,23 @@ jobs:
           path: dist
           pattern: '[lmw]*'   # linux, macos, windows-* (skips docker build records)
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with: { name: image-digest, path: digest }
+      - id: digest
+        run: echo "ref=$(cat digest/image-digest.txt)" >> "$GITHUB_OUTPUT"
       - run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Build provenance attestation (public repos / GHEC)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign checksums (key, optional)
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        if: ${{ env.COSIGN_PRIVATE_KEY != '' }}
+        run: cosign sign-blob --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false --output-signature dist/SHA256SUMS.txt.sig dist/SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
@@ -189,6 +247,7 @@ jobs:
           files: dist/*
           body: |
             **Server (Docker):** `docker pull ghcr.io/${{ github.repository }}:${{ env.VERSION }}`
+            Pin by digest in production: `${{ steps.digest.outputs.ref }}` (multi-arch, SBOM + provenance attached, vulnerability-scanned)
             **macOS:** `WG2FA-*-macos-universal.dmg` (Apple Silicon + Intel)
             **Windows:** `WG2FA-*-windows-x64-setup.exe` / `-arm64-setup.exe`
             **Linux:** server + client tarballs

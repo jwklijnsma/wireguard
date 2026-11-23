@@ -15,9 +15,14 @@ if [ "${WG2FA_NAT:-1}" = "1" ]; then
   if [ -n "$OUT" ]; then
     iptables -t nat -C POSTROUTING -s "$SUBNET" -o "$OUT" -j MASQUERADE 2>/dev/null || \
       iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$OUT" -j MASQUERADE
-    iptables -C FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || iptables -A FORWARD -i "$IFACE" -j ACCEPT
-    iptables -C FORWARD -o "$IFACE" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
-      iptables -A FORWARD -o "$IFACE" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    if [ "${WG2FA_FIREWALL:-1}" = "0" ]; then
+      # legacy allow-all forwarding; by default wg2fa-server installs a
+      # default-deny policy per peer/profile (chain WG2FA-FWD) instead
+      echo "WARNING: WG2FA_FIREWALL=0, VPN peers can reach everything"
+      iptables -C FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || iptables -A FORWARD -i "$IFACE" -j ACCEPT
+      iptables -C FORWARD -o "$IFACE" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+        iptables -A FORWARD -o "$IFACE" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    fi
     echo "NAT: $SUBNET -> $OUT"
   fi
 fi

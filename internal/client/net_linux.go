@@ -46,5 +46,13 @@ func configureOS(ifname string, addr netip.Prefix, routes []netip.Prefix, dns []
 		}
 	}
 	// routes and resolvectl settings disappear with the interface
+	if blockIPv6(full, endpoint) {
+		v6 := v6TunnelAddr(addr.Addr())
+		if _, err := run("ip", "-6", "address", "add", v6.String(), "dev", ifname); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		} else if _, err := run("ip", "-6", "route", "replace", v6Blackhole, "dev", ifname, "metric", "1"); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		}
+	}
 	return u.run, nil
 }

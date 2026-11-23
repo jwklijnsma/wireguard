@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -156,10 +157,61 @@ func (l *limiter) blocked(key string) bool {
 	return n >= limitMax
 }
 
+// limiterMaxKeys bounds memory: an attacker spraying usernames/IPs cannot
+// grow the table without limit.
+const limiterMaxKeys = 50_000
+
 func (l *limiter) failed(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.fail[key] = append(l.fail[key], time.Now())
+	if _, ok := l.fail[key]; !ok && len(l.fail) >= limiterMaxKeys {
+		l.gcLocked()
+		if len(l.fail) >= limiterMaxKeys {
+			l.evictOldestLocked(limiterMaxKeys / 10)
+		}
+	}
+	ts := append(l.fail[key], time.Now())
+	if len(ts) > limitMax*2 {
+		ts = ts[len(ts)-limitMax*2:]
+	}
+	l.fail[key] = ts
+}
+
+// gc drops entries whose failures are all outside the window.
+func (l *limiter) gc() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.gcLocked()
+}
+
+func (l *limiter) gcLocked() {
+	cut := time.Now().Add(-limitWindow)
+	for k, ts := range l.fail {
+		if len(ts) == 0 || !ts[len(ts)-1].After(cut) {
+			delete(l.fail, k)
+		}
+	}
+}
+
+func (l *limiter) evictOldestLocked(n int) {
+	type kv struct {
+		k string
+		t time.Time
+	}
+	all := make([]kv, 0, len(l.fail))
+	for k, ts := range l.fail {
+		all = append(all, kv{k, ts[len(ts)-1]})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].t.Before(all[j].t) })
+	for i := 0; i < n && i < len(all); i++ {
+		delete(l.fail, all[i].k)
+	}
+}
+
+func (l *limiter) size() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.fail)
 }
 
 func (l *limiter) reset(key string) {

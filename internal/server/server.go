@@ -17,22 +17,28 @@ import (
 )
 
 type Config struct {
-	Listen        string // web GUI + client API, e.g. :8080
-	DataDir       string
-	Iface         string
-	Endpoint      string // public host[:port] clients connect to
-	Port          int    // WireGuard UDP port
-	Subnet        string // VPN subnet, e.g. 10.8.0.0/24
-	MTU           int
-	DryRun        bool
-	AdminUser     string
-	AdminPassword string
-	TLSCert       string
-	TLSKey        string
-	Issuer        string // name shown in authenticator apps
-	TrustProxy    bool   // honour X-Forwarded-For / X-Forwarded-Proto
-	Version       string
-	DownloadDirs  []string // client installers offered on the "Get connected" page
+	Listen         string // web GUI + client API, e.g. :8080
+	DataDir        string
+	Iface          string
+	Endpoint       string // public host[:port] clients connect to
+	Port           int    // WireGuard UDP port
+	Subnet         string // VPN subnet, e.g. 10.8.0.0/24
+	MTU            int
+	DryRun         bool
+	AdminUser      string
+	AdminPassword  string
+	TLSCert        string
+	TLSKey         string
+	Issuer         string   // name shown in authenticator apps
+	TrustProxy     bool     // honour X-Forwarded-* from TrustedProxies (default: loopback + private ranges)
+	TrustedProxies []string // CIDRs of reverse proxies whose X-Forwarded-* headers are trusted
+	AdminNets      []string // if set, /admin/* is only reachable from these CIDRs
+	HSTS           bool     // send Strict-Transport-Security on HTTPS responses
+	Firewall       bool     // manage the default-deny forwarding policy (iptables)
+	BlockNets      []string // destinations no VPN peer may reach (management networks, ...)
+	StateKey       string   // passphrase encrypting state.json at rest (optional)
+	Version        string
+	DownloadDirs   []string // client installers offered on the "Get connected" page
 }
 
 type Server struct {
@@ -44,6 +50,31 @@ type Server struct {
 	limit   *limiter
 	changed chan struct{}
 	tmpl    *templates
+
+	trusted      []netip.Prefix
+	adminNets    []netip.Prefix
+	blockNets    []netip.Prefix
+	lastFirewall string
+}
+
+func parseNets(list []string, what string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, a := range list {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(a)
+		if err != nil {
+			ad, err2 := netip.ParseAddr(a)
+			if err2 != nil {
+				return nil, fmt.Errorf("%s: invalid network %q", what, a)
+			}
+			p = netip.PrefixFrom(ad, ad.BitLen())
+		}
+		out = append(out, p.Masked())
+	}
+	return out, nil
 }
 
 func New(cfg Config) (*Server, error) {
@@ -57,7 +88,22 @@ func New(cfg Config) (*Server, error) {
 	if !strings.Contains(cfg.Endpoint, ":") || strings.HasSuffix(cfg.Endpoint, "]") {
 		cfg.Endpoint = net.JoinHostPort(strings.Trim(cfg.Endpoint, "[]"), fmt.Sprint(cfg.Port))
 	}
-	st, err := OpenStore(cfg.DataDir)
+	trusted, err := parseNets(cfg.TrustedProxies, "trusted proxies")
+	if err != nil {
+		return nil, err
+	}
+	if cfg.TrustProxy && len(trusted) == 0 {
+		trusted, _ = parseNets([]string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}, "")
+	}
+	adminNets, err := parseNets(cfg.AdminNets, "admin networks")
+	if err != nil {
+		return nil, err
+	}
+	blockNets, err := parseNets(cfg.BlockNets, "blocked networks")
+	if err != nil {
+		return nil, err
+	}
+	st, err := OpenStore(cfg.DataDir, cfg.StateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +115,7 @@ func New(cfg Config) (*Server, error) {
 		cfg: cfg, store: st, subnet: subnet.Masked(),
 		sess: newSessions(), limit: newLimiter(),
 		changed: make(chan struct{}, 1), tmpl: t,
+		trusted: trusted, adminNets: adminNets, blockNets: blockNets,
 		wg: &WG{Iface: cfg.Iface, Port: cfg.Port, Subnet: subnet.Masked(), MTU: cfg.MTU, DataDir: cfg.DataDir, DryRun: cfg.DryRun},
 	}
 	if err := s.bootstrap(); err != nil {
@@ -148,10 +195,13 @@ func (s *Server) reconcileLoop(ctx context.Context) {
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	for {
+		s.applyFirewall() // rules first, so a peer is never live without its policy
 		if err := s.wg.Apply(s.desired()); err != nil {
 			log.Printf("reconcile: %v", err)
 		}
+		s.applyFirewall()
 		s.sess.gc()
+		s.limit.gc()
 		select {
 		case <-ctx.Done():
 			return
@@ -193,23 +243,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return nil
 	}
 	return err
-}
-
-func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			return strings.TrimSpace(strings.Split(xff, ",")[0])
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
-func (s *Server) isHTTPS(r *http.Request) bool {
-	return r.TLS != nil || (s.cfg.TrustProxy && r.Header.Get("X-Forwarded-Proto") == "https")
 }
 
 func hashToken(t string) string {

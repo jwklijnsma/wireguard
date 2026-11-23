@@ -46,6 +46,7 @@ WireGuard itself has no login step: anyone holding a valid key can connect. WG2F
 mkdir wg2fa && cd wg2fa
 curl -O https://raw.githubusercontent.com/jwklijnsma/wireguard/main/docker-compose.yml
 # edit WG2FA_ENDPOINT to your public hostname
+openssl rand -base64 32 > state.key && chmod 600 state.key   # encrypts state at rest
 docker compose up -d
 docker compose logs wg2fa | grep -A2 "first start"   # initial admin password
 ```
@@ -77,9 +78,17 @@ The kernel WireGuard module is used when the host has it. Otherwise the image fa
 | `WG2FA_NAT` | `1` | MASQUERADE VPN traffic to the default interface |
 | `WG2FA_MTU` | `1420` | Interface MTU |
 | `WG2FA_DOWNLOADS` | `/data/downloads:/usr/share/wg2fa/downloads` | Folders whose client installers are offered on *Get connected*. Files in `/data/downloads` override the bundled ones, e.g. your own signed builds |
+| `WG2FA_FIREWALL` | `true` | Default-deny forwarding policy per peer/profile (see [SECURITY.md](SECURITY.md)) |
+| `WG2FA_BLOCK_NETS` | — | CIDRs no VPN peer may reach (management networks) |
+| `WG2FA_ADMIN_NETS` | — | CIDRs allowed to use the admin pages |
+| `WG2FA_TRUSTED_PROXIES` | private ranges | Proxies whose `X-Forwarded-*` headers are trusted (with `WG2FA_TRUST_PROXY`) |
+| `WG2FA_HSTS` | `false` | Send HSTS on HTTPS |
+| `WG2FA_STATE_KEY` / `_FILE` | — | Encrypt `state.json` at rest (16+ chars) |
 | `WG2FA_DRYRUN` | `false` | Don't touch WireGuard (GUI development) |
 
-All state (keys, users, peers, audit) lives in `/data/state.json` (mode 0600). Back it up.
+All state (keys, users, peers, audit) lives in `/data/state.json` (mode 0600, optionally encrypted). For an encrypted backup, run `docker exec wg2fa wg2fa-server backup /data/backup-$(date +%F).enc`.
+
+**Before going to production, read [SECURITY.md](SECURITY.md).** It has the forwarding policy, hardening options and a deployment OPSEC checklist.
 
 ## Using it
 
@@ -145,7 +154,7 @@ The device generates its own key pair; the private key never leaves the device.
 
 ## Security notes and limitations
 
-- The tunnel is **IPv4 only** for now, and IPv6 routes in profiles are ignored on clients. On a full-tunnel profile, IPv6 traffic still leaves through the normal connection.
+- The tunnel is **IPv4 only** for now. On full-tunnel profiles the desktop client blocks IPv6 (routed into the tunnel and dropped), so it cannot leak.
 - **Windows DNS:** the tunnel's DNS servers are set on the WG2FA adapter with a low metric, but there is no firewall-based leak protection yet (the official client uses WFP rules for that).
 - **Routers** can't do TOTP, so they are always on. Disable a router in the GUI to cut it off.
 - Web sessions are kept in memory, so a server restart signs everyone out of the GUI. VPN sessions are persisted and survive restarts.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -46,6 +47,9 @@ type Profile struct {
 	Keepalive    int      `json:"keepalive"`
 	SessionHours int      `json:"session_hours"`
 	Require2FA   bool     `json:"require_2fa"`
+	// AllowPeerToPeer lets peers on this profile reach other VPN peers;
+	// by default the firewall only lets them reach their routes.
+	AllowPeerToPeer bool `json:"allow_peer_to_peer"`
 }
 
 type Peer struct {
@@ -89,24 +93,57 @@ type Store struct {
 	mu   sync.RWMutex
 	path string
 	s    state
+	enc  *stateCipher // nil = plaintext
 }
 
 const maxAudit = 1000
 
-func OpenStore(dir string) (*Store, error) {
+// OpenStore loads state.json. With a non-empty key the file is encrypted at
+// rest (AES-256-GCM, key from PBKDF2-SHA256); an existing plaintext file is
+// migrated on first start.
+func OpenStore(dir, key string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	st := &Store{path: filepath.Join(dir, "state.json")}
 	b, err := os.ReadFile(st.path)
 	if errors.Is(err, os.ErrNotExist) {
+		if key != "" {
+			if st.enc, err = newStateCipher(key, nil); err != nil {
+				return nil, err
+			}
+		}
 		return st, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	migrate := false
+	if isEncrypted(b) {
+		if key == "" {
+			return nil, fmt.Errorf("%s is encrypted: set WG2FA_STATE_KEY or WG2FA_STATE_KEY_FILE", st.path)
+		}
+		st.enc, b, err = decryptState(key, b)
+		if err != nil {
+			return nil, err
+		}
+	} else if key != "" {
+		if st.enc, err = newStateCipher(key, nil); err != nil {
+			return nil, err
+		}
+		migrate = true
+	}
 	if err := json.Unmarshal(b, &st.s); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", st.path, err)
+	}
+	if migrate {
+		st.mu.Lock()
+		err := st.saveLocked()
+		st.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("state: %s is now encrypted at rest", st.path)
 	}
 	return st, nil
 }
@@ -116,6 +153,11 @@ func (st *Store) saveLocked() error {
 	b, err := json.MarshalIndent(&st.s, "", "  ")
 	if err != nil {
 		return err
+	}
+	if st.enc != nil {
+		if b, err = st.enc.seal(b); err != nil {
+			return err
+		}
 	}
 	tmp := st.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {

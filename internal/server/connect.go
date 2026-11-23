@@ -171,7 +171,7 @@ func (s *Server) connectPage(w http.ResponseWriter, r *http.Request, me *User, w
 		scheme = "https"
 	}
 	host := r.Host
-	if s.cfg.TrustProxy && r.Header.Get("X-Forwarded-Host") != "" {
+	if s.fromTrustedProxy(r) && r.Header.Get("X-Forwarded-Host") != "" {
 		host = r.Header.Get("X-Forwarded-Host")
 	}
 	d := connectData{ServerURL: scheme + "://" + host, Downloads: s.downloads(), OS: detectOS(r.UserAgent()), TwoFA: me.TOTPEnabled}

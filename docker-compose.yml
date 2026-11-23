@@ -14,8 +14,18 @@ services:
       WG2FA_ISSUER: "My VPN"                  # name shown in authenticator apps
       # WG2FA_ADMIN_PASSWORD: change-me-now   # otherwise a random one is printed in the log
       # WG2FA_TRUST_PROXY: "true"             # when behind Traefik/Caddy/nginx
+      # WG2FA_TRUSTED_PROXIES: 172.16.0.0/12  # only these may set X-Forwarded-*
+      # WG2FA_ADMIN_NETS: 10.8.0.0/24,192.168.10.0/24   # admin pages only from VPN/office
+      # WG2FA_BLOCK_NETS: 192.168.1.0/24      # management networks no peer may reach
+      # WG2FA_HSTS: "true"
+      WG2FA_STATE_KEY_FILE: /run/secrets/wg2fa_state_key   # encrypts state.json at rest
+    secrets: [wg2fa_state_key]
     ports:
       - "51820:51820/udp"
       - "127.0.0.1:8080:8080"   # put a TLS reverse proxy in front, or set WG2FA_TLS_CERT/KEY
     volumes:
       - ./data:/data
+
+secrets:
+  wg2fa_state_key:
+    file: ./state.key   # create with: openssl rand -base64 32 > state.key && chmod 600 state.key

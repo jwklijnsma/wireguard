@@ -35,5 +35,15 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: wg2fa-ci:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Vulnerability scan
+        uses: anchore/scan-action@v6
+        with:
+          image: wg2fa-ci:${{ github.sha }}
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table

@@ -93,5 +93,16 @@ func configureOS(ifname string, addr netip.Prefix, routes []netip.Prefix, dns []
 		run("dscacheutil", "-flushcache")
 		run("killall", "-HUP", "mDNSResponder")
 	}
+	if blockIPv6(full, endpoint) {
+		v6 := v6TunnelAddr(addr.Addr())
+		if _, err := run("ifconfig", ifname, "inet6", v6.Addr().String(), "prefixlen", "128", "alias"); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		} else if _, err := run("route", "-q", "-n", "add", "-inet6", v6Blackhole, "-interface", ifname); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		} else {
+			u.add(func() { run("route", "-q", "-n", "delete", "-inet6", v6Blackhole, "-interface", ifname) })
+			logf("IPv6 leak protection active (%s -> %s)", v6Blackhole, ifname)
+		}
+	}
 	return u.run, nil
 }

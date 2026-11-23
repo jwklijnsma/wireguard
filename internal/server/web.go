@@ -192,7 +192,7 @@ func (s *Server) routes() http.Handler {
 	admin("POST /admin/peers/{id}/toggle", s.peerToggle)
 	admin("POST /admin/peers/{id}/revoke", s.peerRevoke)
 	admin("GET /admin/audit", s.auditPage)
-	return securityHeaders(m)
+	return s.hsts(securityHeaders(m))
 }
 
 // ---------- auth middleware ----------
@@ -243,6 +243,13 @@ func (s *Server) auth(adminOnly bool, h func(http.ResponseWriter, *http.Request,
 		if enrol && !strings.HasPrefix(r.URL.Path, "/account") && r.URL.Path != "/connect" {
 			redirect(w, r, "/account", "Set up two-factor authentication before continuing.")
 			return
+		}
+		if u.IsAdmin && !s.adminAllowed(r) {
+			if adminOnly {
+				http.Error(w, "the admin pages are not reachable from this network", http.StatusForbidden)
+				return
+			}
+			u.IsAdmin = false // outside WG2FA_ADMIN_NETS an admin is just a user
 		}
 		if adminOnly && !u.IsAdmin {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -957,7 +964,8 @@ func (s *Server) profileSave(w http.ResponseWriter, r *http.Request, me *User, w
 	}
 	p := Profile{Name: name, Description: strings.TrimSpace(r.FormValue("description")), AllowedIPs: aips, DNS: dns,
 		MTU: atoi("mtu", 1420, 1280, 1500), Keepalive: atoi("keepalive", 25, 0, 600),
-		SessionHours: atoi("session_hours", 12, 0, 24*30), Require2FA: r.FormValue("require_2fa") == "on"}
+		SessionHours: atoi("session_hours", 12, 0, 24*30), Require2FA: r.FormValue("require_2fa") == "on",
+		AllowPeerToPeer: r.FormValue("allow_p2p") == "on"}
 	_ = s.store.Update(func(st *state) error {
 		if id := r.FormValue("id"); id != "" {
 			for _, x := range st.Profiles {

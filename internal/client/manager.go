@@ -47,6 +47,7 @@ type Status struct {
 	Interface  string    `json:"interface,omitempty"`
 	Version    string    `json:"version"`
 	Insecure   bool      `json:"insecure"`
+	IPv6       string    `json:"ipv6,omitempty"`
 }
 
 type Manager struct {
@@ -226,7 +227,12 @@ func (m *Manager) Connect(req ConnectRequest) error {
 	m.mu.Lock()
 	m.token = lr.Token
 	m.status = Status{State: "connected", Profile: lr.Profile, Address: lr.Config.Address, Endpoint: lr.Config.Endpoint,
-		Routes: lr.Config.AllowedIPs, DNS: lr.Config.DNS, ExpiresAt: lr.ExpiresAt}
+		Routes: lr.Config.AllowedIPs, DNS: lr.Config.DNS, ExpiresAt: lr.ExpiresAt, IPv6: "not routed (split tunnel)"}
+	for _, a := range lr.Config.AllowedIPs {
+		if strings.TrimSpace(a) == "0.0.0.0/0" {
+			m.status.IPv6 = "blocked (leak protection)"
+		}
+	}
 	if m.cancelEx != nil {
 		m.cancelEx()
 	}

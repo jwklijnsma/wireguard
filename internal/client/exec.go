@@ -47,3 +47,23 @@ func (u undo) run() {
 		u[i]()
 	}
 }
+
+// IPv6 leak protection. The tunnel carries IPv4 only, so on a full-tunnel
+// profile all global IPv6 (2000::/3) is routed into the tunnel interface,
+// where wireguard-go drops it (no peer has an IPv6 allowed-ip). Without this,
+// IPv6 traffic would silently bypass the VPN on dual-stack networks.
+const v6Blackhole = "2000::/3"
+
+// blockIPv6 reports whether IPv6 must be captured: only for full tunnels, and
+// not when the server itself is reached over IPv6 (that would loop).
+func blockIPv6(full bool, endpoint netip.Addr) bool {
+	return full && endpoint.Is4()
+}
+
+// v6TunnelAddr gives the tunnel interface a unique-local address derived from
+// its IPv4 address (fd77:2fa::a.b.c.d), needed before IPv6 routes can use it.
+func v6TunnelAddr(v4 netip.Addr) netip.Prefix {
+	b := v4.As4()
+	a := netip.AddrFrom16([16]byte{0xfd, 0x77, 0x02, 0xfa, 12: b[0], 13: b[1], 14: b[2], 15: b[3]})
+	return netip.PrefixFrom(a, 128)
+}

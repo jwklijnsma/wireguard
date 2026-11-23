@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/jwklijnsma/wireguard/internal/server"
@@ -37,6 +38,35 @@ func envBool(k string) bool {
 	return b
 }
 
+func envBoolDefault(k string, def bool) bool {
+	if b, err := strconv.ParseBool(os.Getenv(k)); err == nil {
+		return b
+	}
+	return def
+}
+
+func splitCSV(v string) []string {
+	var out []string
+	for _, f := range strings.Split(v, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// secret reads NAME or the file named by NAME_FILE (Docker/Kubernetes secrets).
+func secret(name string) (string, error) {
+	if f := os.Getenv(name + "_FILE"); f != "" {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return "", fmt.Errorf("%s_FILE: %w", name, err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	return os.Getenv(name), nil
+}
+
 func main() {
 	var c server.Config
 	flag.StringVar(&c.Listen, "listen", env("WG2FA_LISTEN", ":8080"), "web GUI / API listen address")
@@ -52,8 +82,38 @@ func main() {
 	flag.StringVar(&c.TLSKey, "tls-key", env("WG2FA_TLS_KEY", ""), "TLS key (PEM)")
 	flag.StringVar(&c.Issuer, "issuer", env("WG2FA_ISSUER", "WG2FA VPN"), "issuer name in authenticator apps")
 	flag.BoolVar(&c.TrustProxy, "trust-proxy", envBool("WG2FA_TRUST_PROXY"), "trust X-Forwarded-For/-Proto (behind a reverse proxy)")
+	var trusted, adminNets, blockNets string
+	flag.StringVar(&trusted, "trusted-proxies", env("WG2FA_TRUSTED_PROXIES", ""), "comma-separated CIDRs of reverse proxies (default with -trust-proxy: loopback + private ranges)")
+	flag.StringVar(&adminNets, "admin-nets", env("WG2FA_ADMIN_NETS", ""), "comma-separated CIDRs allowed to use the admin pages (default: anywhere)")
+	flag.StringVar(&blockNets, "block-nets", env("WG2FA_BLOCK_NETS", ""), "comma-separated CIDRs no VPN peer may reach")
+	flag.BoolVar(&c.HSTS, "hsts", envBool("WG2FA_HSTS"), "send Strict-Transport-Security on HTTPS")
+	flag.BoolVar(&c.Firewall, "firewall", envBoolDefault("WG2FA_FIREWALL", true), "manage the default-deny forwarding firewall (iptables)")
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
+	c.TrustedProxies, c.AdminNets, c.BlockNets = splitCSV(trusted), splitCSV(adminNets), splitCSV(blockNets)
+	key, err := secret("WG2FA_STATE_KEY")
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.StateKey = key
+	if flag.Arg(0) == "backup" {
+		// wg2fa-server backup <file>: encrypted copy of the state
+		if flag.NArg() != 2 {
+			log.Fatal("usage: wg2fa-server backup <output-file>")
+		}
+		bkey, err := secret("WG2FA_BACKUP_KEY")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if bkey == "" {
+			bkey = key
+		}
+		if err := server.Backup(c.DataDir, key, bkey, flag.Arg(1)); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("encrypted backup written to", flag.Arg(1))
+		return
+	}
 	if *showVersion {
 		fmt.Println(version)
 		return

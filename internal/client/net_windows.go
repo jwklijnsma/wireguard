@@ -81,5 +81,16 @@ func configureOS(ifname string, addr netip.Prefix, routes []netip.Prefix, dns []
 		run("ipconfig", "/flushdns")
 	}
 	// interface routes and DNS vanish together with the Wintun adapter
+	if blockIPv6(full, endpoint) {
+		v6 := v6TunnelAddr(addr.Addr())
+		if _, err := run("netsh", "interface", "ipv6", "add", "address", "interface="+id, "address="+v6.String(), "store=active"); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		} else if _, err := run("netsh", "interface", "ipv6", "add", "route", "prefix="+v6Blackhole, "interface="+id, "metric=1", "store=active"); err != nil {
+			logf("IPv6 leak protection: %v", err)
+		} else {
+			run("netsh", "interface", "ipv6", "set", "interface", id, "metric=5")
+			logf("IPv6 leak protection active (%s -> %s)", v6Blackhole, ifname)
+		}
+	}
 	return u.run, nil
 }

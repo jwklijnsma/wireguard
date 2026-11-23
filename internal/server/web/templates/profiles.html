@@ -2,7 +2,7 @@
 {{$csrf := .CSRF}}
 <section class="card">
   <h2>VPN profiles</h2>
-  <p class="muted">A profile decides which routes and DNS a client gets, how long a 2FA unlock lasts, and whether 2FA is enforced at all (routers).</p>
+  <p class="muted">A profile decides which routes and DNS a client gets, how long a 2FA unlock lasts, and whether 2FA is enforced at all (routers). The server firewall is default-deny: peers can only reach the routes of their profile.</p>
 </section>
 {{range .Data}}
 <section class="card">
@@ -17,6 +17,7 @@
     <label>Keepalive (s) <input name="keepalive" type="number" value="{{.Keepalive}}" min="0" max="600"></label>
     <label>2FA session length (hours) <input name="session_hours" type="number" value="{{.SessionHours}}" min="0" max="720"></label>
     <label class="check"><input type="checkbox" name="require_2fa" {{if .Require2FA}}checked{{end}}> require 2FA unlock</label>
+    <label class="check"><input type="checkbox" name="allow_p2p" {{if .AllowPeerToPeer}}checked{{end}}> allow peer-to-peer (reach other VPN peers)</label>
     <div class="row"><button class="primary">Save</button></div>
   </form>
   <form method="post" action="/admin/profiles/{{.ID}}/delete" data-confirm="Delete profile {{.Name}}?"><input type="hidden" name="csrf" value="{{$csrf}}"><button class="small danger">Delete profile</button></form>
@@ -34,6 +35,7 @@
     <label>Keepalive (s) <input name="keepalive" type="number" value="25"></label>
     <label>2FA session length (hours) <input name="session_hours" type="number" value="12"></label>
     <label class="check"><input type="checkbox" name="require_2fa" checked> require 2FA unlock</label>
+    <label class="check"><input type="checkbox" name="allow_p2p"> allow peer-to-peer</label>
     <div><button class="primary">Create profile</button></div>
   </form>
 </section>
