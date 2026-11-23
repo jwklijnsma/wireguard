@@ -11,7 +11,8 @@ RUN go mod tidy \
  && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w" -o /out/wireguard-go golang.zx2c4.com/wireguard
 
 FROM alpine:3.24
-RUN apk add --no-cache wireguard-tools iproute2 iptables ca-certificates tzdata
+RUN apk upgrade --no-cache \
+ && apk add --no-cache wireguard-tools-wg iproute2-minimal iptables ca-certificates-bundle tzdata
 COPY --from=build /out/wg2fa-server /out/wireguard-go /usr/local/bin/
 COPY packaging/downloads/ /usr/share/wg2fa/downloads/
 COPY packaging/docker/entrypoint.sh /entrypoint.sh
