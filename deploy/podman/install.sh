@@ -40,9 +40,26 @@ if ! podman secret exists wg2fa_state_key 2>/dev/null; then
   echo "  Back it up: podman secret inspect --showsecret --format '{{.SecretData}}' wg2fa_state_key"
 fi
 
-# load the kernel module now and at boot; the image falls back to wireguard-go otherwise
-if modprobe wireguard 2>/dev/null; then
-  echo wireguard > /etc/modules-load.d/wg2fa.conf
+# WireGuard needs the kernel module, or /dev/net/tun for the wireguard-go fallback
+virt=$(systemd-detect-virt --container 2>/dev/null || true)
+if [ "$virt" != lxc ] && modprobe wireguard 2>/dev/null; then
+  echo wireguard > /etc/modules-load.d/wg2fa.conf     # load at boot too
+fi
+if [ -d /sys/module/wireguard ]; then
+  echo "WireGuard kernel module: loaded"
+elif [ -c /dev/net/tun ]; then
+  echo "WireGuard kernel module: not available, using wireguard-go via /dev/net/tun"
+else
+  echo "WARNING: no WireGuard kernel module and no /dev/net/tun: the VPN can't start." >&2
+  if [ "$virt" = lxc ]; then
+    cat >&2 <<'MSG'
+This is an LXC container. On the Proxmox host, either load the module (preferred):
+    modprobe wireguard && echo wireguard > /etc/modules-load.d/wireguard.conf
+or pass /dev/net/tun into the container and restart it:
+    pct set <CTID> -dev0 /dev/net/tun && pct reboot <CTID>
+See https://jwklijnsma.github.io/wireguard/install/podman/#proxmox-lxc
+MSG
+  fi
 fi
 
 systemctl daemon-reload
