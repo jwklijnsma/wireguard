@@ -96,6 +96,51 @@ sudo systemctl daemon-reload
 sudo podman volume rm wg2fa-data && sudo podman secret rm wg2fa_state_key && sudo rm -r /etc/wg2fa
 ```
 
+## Proxmox LXC
+
+Podman runs fine in an LXC container with *nesting* enabled, but an LXC can't load kernel modules and has no `/dev/net/tun` by default. WG2FA needs one of the two:
+
+=== "Kernel module (preferred)"
+
+    On the **Proxmox host** (the LXC shares its kernel):
+
+    ```bash
+    modprobe wireguard
+    echo wireguard > /etc/modules-load.d/wireguard.conf   # also after a reboot
+    ```
+
+    Kernel WireGuard is faster than `wireguard-go` and needs no device inside the container.
+
+=== "/dev/net/tun (userspace fallback)"
+
+    On the **Proxmox host** (Proxmox VE 8.1+):
+
+    ```bash
+    pct set <CTID> -dev0 /dev/net/tun
+    pct reboot <CTID>
+    ```
+
+    On older versions, add to `/etc/pve/lxc/<CTID>.conf` and restart the container:
+
+    ```
+    lxc.cgroup2.devices.allow: c 10:200 rwm
+    lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+    ```
+
+Also make sure the container has nesting enabled (`pct set <CTID> -features nesting=1`) for Podman.
+
+Then, inside the container:
+
+```bash
+sudo systemctl daemon-reload     # re-evaluates the optional /dev/net/tun device
+sudo systemctl restart wg2fa
+```
+
+`install.sh` checks for both and prints these steps when neither is available. The unit adds `/dev/net/tun` only when it exists (`AddDevice=-/dev/net/tun`), so with the kernel module the container starts without it.
+
+!!! failure "`Error: stat /dev/net/tun: no such file or directory`"
+    Units installed before this fix require the device. Re-run `sudo ./install.sh` from an up-to-date checkout, or change the line to `AddDevice=-/dev/net/tun` in `/etc/containers/systemd/wg2fa.container`, then `systemctl daemon-reload`.
+
 ## Notes
 
 - **SELinux:** the `:Z` volume option labels the volume for the container.
