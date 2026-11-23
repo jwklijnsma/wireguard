@@ -1,0 +1,96 @@
+site_name: WG2FA
+site_description: Self-hosted WireGuard VPN with TOTP two-factor authentication, VPN profiles, site-to-site routers, a web GUI and macOS/Windows clients.
+site_url: https://jwklijnsma.github.io/wireguard/
+repo_url: https://github.com/jwklijnsma/wireguard
+repo_name: jwklijnsma/wireguard
+edit_uri: edit/main/docs/
+exclude_docs: |
+  requirements.txt
+copyright: WireGuard® is a registered trademark of Jason A. Donenfeld. This project is not affiliated with the WireGuard project.
+
+theme:
+  name: material
+  icon:
+    logo: material/shield-lock
+    repo: fontawesome/brands/github
+  favicon: assets/favicon.svg
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Follow system setting
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Screenshots: screenshots.md
+  - Install:
+      - install/index.md
+      - Docker: install/docker.md
+      - Podman + systemd: install/podman.md
+      - Reverse proxy & TLS: install/reverse-proxy.md
+      - Configuration: install/configuration.md
+  - Guide:
+      - Getting started: guide/getting-started.md
+      - Desktop clients: guide/clients.md
+      - Phones & wg-quick: guide/phones.md
+      - Routers (site-to-site): guide/routers.md
+      - VPN profiles: guide/profiles.md
+      - Backup & restore: guide/backup.md
+  - Security:
+      - security/index.md
+      - Forwarding policy: security/forwarding-policy.md
+      - Hardening: security/hardening.md
+      - Supply chain: security/supply-chain.md
+      - OPSEC checklist: security/checklist.md
+  - Development:
+      - development/index.md
+      - Client API: development/client-api.md
+      - Releases: development/releases.md

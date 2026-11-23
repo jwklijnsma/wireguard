@@ -1,5 +1,7 @@
 # WG2FA — WireGuard VPN with two-factor authentication
 
+📖 **Documentation: <https://jwklijnsma.github.io/wireguard/>**
+
 Self-hosted WireGuard VPN server with **TOTP 2FA**, **VPN profiles**, **site-to-site routers**, a **web GUI**, and native **macOS and Windows clients**.
 
 WireGuard itself has no login step: anyone holding a valid key can connect. WG2FA adds one. A device's peer is only loaded into WireGuard **while its owner has a valid 2FA session**. When the session expires or is revoked, the server removes the peer and the tunnel stops passing traffic.
