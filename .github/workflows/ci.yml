@@ -40,7 +40,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Vulnerability scan
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7
         with:
           image: wg2fa-ci:${{ github.sha }}
           severity-cutoff: high
