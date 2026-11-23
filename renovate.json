@@ -10,6 +10,12 @@
       "description": "Keep digest-only refreshes of base images together",
       "matchUpdateTypes": ["digest", "pin", "pinDigest"],
       "groupName": "digest pins"
+    },
+    {
+      "description": "wireguard-go follows release tags via .github/workflows/wireguard-go-update.yml",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["golang.zx2c4.com/wireguard"],
+      "enabled": false
     }
   ],
   "vulnerabilityAlerts": { "enabled": true }
