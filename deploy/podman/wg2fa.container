@@ -1,0 +1,49 @@
+# WG2FA: WireGuard + 2FA + web GUI on :8080, WireGuard on UDP 51820
+# Installed by ./install.sh into /etc/containers/systemd (rootful, see README.md)
+[Unit]
+Description=WG2FA - WireGuard VPN with 2FA and web GUI
+Documentation=https://jwklijnsma.github.io/wireguard/install/podman/
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=wg2fa
+Image=ghcr.io/jwklijnsma/wireguard:latest
+AutoUpdate=registry
+Network=wg2fa.network
+Volume=wg2fa-data.volume:/data:Z
+EnvironmentFile=/etc/wg2fa/wg2fa.env
+
+# wg0 + iptables NAT/forwarding inside the container's network namespace
+AddCapability=NET_ADMIN
+# only needed for the userspace wireguard-go fallback (no kernel module)
+AddDevice=/dev/net/tun
+Sysctl=net.ipv4.ip_forward=1
+Sysctl=net.ipv4.conf.all.src_valid_mark=1
+
+PublishPort=51820:51820/udp
+# web GUI on localhost only: put a TLS reverse proxy in front,
+# or set WG2FA_TLS_CERT/KEY and change this to 8080:8080
+PublishPort=127.0.0.1:8080:8080
+
+# encrypts state.json at rest; created by install.sh
+Secret=wg2fa_state_key,type=mount,mode=0400,target=/run/secrets/wg2fa_state_key
+Environment=WG2FA_STATE_KEY_FILE=/run/secrets/wg2fa_state_key
+
+HealthCmd=wget -qO- http://127.0.0.1:8080/healthz
+HealthInterval=30s
+HealthTimeout=3s
+HealthStartPeriod=20s
+HealthRetries=3
+HealthOnFailure=kill
+NoNewPrivileges=true
+# Podman >= 5.0: report "started" to systemd only once healthy
+#Notify=healthy
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

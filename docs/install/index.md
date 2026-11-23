@@ -5,7 +5,7 @@ The server runs as a container that needs `NET_ADMIN` (to create `wg0` and manag
 | Method | When to use it |
 |---|---|
 | [Docker Compose](docker.md) | Quickest start on any Docker host. |
-| [Podman + systemd](podman.md) | RHEL/Fedora/Debian hosts without Docker; runs as `wg2fa.service` with auto-updates. |
+| [Podman + systemd](podman.md) | RHEL/Fedora/Debian hosts without Docker: `sudo ./install.sh` sets up `wg2fa.service` with its own network, volume, state-key secret and auto-updates. |
 
 After installing:
 

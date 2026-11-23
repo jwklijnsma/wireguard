@@ -63,7 +63,12 @@ vpn.example.nl {
 
 Set `WG2FA_TRUST_PROXY=true` when running behind a proxy. Alternatively, set `WG2FA_TLS_CERT` / `WG2FA_TLS_KEY` and expose 8080 directly. Then open UDP **51820** on your firewall.
 
-Prefer Podman? [`packaging/podman`](packaging/podman/README.md) has a Quadlet unit that runs the same container as a systemd service (`wg2fa.service`), with auto-updates.
+Prefer Podman? [`deploy/podman`](deploy/podman/README.md) has Quadlet units and an installer that run the same container as a systemd service (`wg2fa.service`), with auto-updates:
+
+```bash
+git clone https://github.com/jwklijnsma/wireguard && cd wireguard/deploy/podman
+sudo ./install.sh vpn.example.nl && sudo systemctl start wg2fa
+```
 
 The kernel WireGuard module is used when the host has it. Otherwise the image falls back to the bundled userspace `wireguard-go`, which needs `/dev/net/tun`.
 
@@ -152,6 +157,8 @@ internal/server       store, auth, 2FA flow, wg reconciler, web GUI, API, router
 internal/client       wireguard-go tunnel, OS network config (darwin/windows/linux), services, local UI
 internal/totp         RFC 6238 TOTP (stdlib only)
 packaging/            Dockerfile entrypoint, macOS app/DMG, Windows Inno Setup
+deploy/podman/        Podman Quadlet units + install.sh (systemd)
+docs/                 documentation site (MkDocs Material)
 ```
 
 ### Client API
