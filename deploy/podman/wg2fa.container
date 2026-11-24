@@ -8,7 +8,7 @@ After=network-online.target
 
 [Container]
 ContainerName=wg2fa
-Image=ghcr.io/jwklijnsma/wireguard:latest@sha256:7261d52bd368bc11d5f225bd5fbe473431dd53a3fc58a769f7845bdd985e185c
+Image=ghcr.io/jwklijnsma/wireguard:latest@sha256:1d7682bd79bb809e3e2e993d222b0bc09edcb5b1c044eedc0a45d11f3a26c923
 AutoUpdate=registry
 Network=wg2fa.network
 Volume=wg2fa-data.volume:/data:Z
