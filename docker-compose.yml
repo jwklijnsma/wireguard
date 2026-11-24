@@ -1,6 +1,6 @@
 services:
   wg2fa:
-    image: ghcr.io/jwklijnsma/wireguard:latest@sha256:d2b0dbe1859ee59a5ac8fc38dbd00c12159bcf954a4cc753582e3742e407b6cd
+    image: ghcr.io/jwklijnsma/wireguard:latest@sha256:7261d52bd368bc11d5f225bd5fbe473431dd53a3fc58a769f7845bdd985e185c
     container_name: wg2fa
     restart: unless-stopped
     cap_add: [NET_ADMIN]
