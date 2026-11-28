@@ -44,9 +44,9 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: renovatebot/github-action@v48.0.0
+      - uses: renovatebot/github-action@1376d90bcd3a4d4e7393ae762eea56ac684aee38 # v48.0.0
         with:
           token: ${{ secrets.RENOVATE_TOKEN }}
         env:
