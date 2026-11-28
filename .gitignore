@@ -7,3 +7,5 @@
 /packaging/downloads/*
 !/packaging/downloads/README.md
 /site/
+site/
+.cache/
