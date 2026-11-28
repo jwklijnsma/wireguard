@@ -8,7 +8,7 @@
 - [ ] Use split-tunnel profiles with explicit routes where possible, and leave *peer-to-peer* off.
 - [ ] Review router LANs. Routers are always-on (no 2FA), so their LANs are trusted entry points.
 - [ ] Encrypt state at rest (`WG2FA_STATE_KEY_FILE`) and make backups with `wg2fa-server backup`. Store backup keys separately from backups.
-- [ ] Never share `/data`, `state.json`, backups, QR codes or `.conf` files. They contain private keys, preshared keys, TOTP secrets and password hashes.
+- [ ] Never share `/data`, `state.json`, backups, QR codes or `.conf` files. They contain preshared keys, TOTP secrets and password hashes (and `.conf` files / QR codes a private key).
 - [ ] Enable HSTS (`WG2FA_HSTS=true`) once HTTPS is enforced.
 - [ ] Deploy images by digest and keep the host updated. Mount only `/data`; the container needs only `NET_ADMIN` (+ `/dev/net/tun` for the userspace fallback).
 - [ ] From a real client, check that IPv4 and IPv6 leave through the VPN (e.g. <https://ipleak.net>, `curl -6 ifconfig.co` should fail on full tunnel).

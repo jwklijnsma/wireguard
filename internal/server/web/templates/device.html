@@ -17,8 +17,10 @@
 
 <section class="card">
   <h2>Configuration</h2>
-  {{if not .HasKey}}
-    <p class="muted">This peer uses its own private key (registered by the desktop client or supplied by you). Replace <code>&lt;YOUR-PRIVATE-KEY&gt;</code> with it.</p>
+  {{if .HasKey}}
+    <p class="flash"><strong>Import this now.</strong> The private key below is held in memory only until the first handshake (at most 15 minutes) and is never written to disk. After that this page shows a placeholder.</p>
+  {{else}}
+    <p class="muted">The server does not hold this peer's private key (it was made on the device, or the one-time key has expired). Replace <code>&lt;YOUR-PRIVATE-KEY&gt;</code> with the device's key, or rotate keys below to get a new one-time config.</p>
   {{end}}
   <div class="tabs">
     {{$f := .Format}}{{$id := .Peer.ID}}
@@ -32,5 +34,17 @@
   {{if eq .Peer.Kind "device"}}<p class="muted small">After importing, unlock the VPN on the dashboard with your 2FA code. The tunnel only passes traffic while the session is unlocked.</p>{{end}}
   {{if eq .Peer.Kind "router"}}<p class="muted small">Routers are always-on (no 2FA). Protect the router itself; disable it here to cut it off instantly.</p>{{end}}
 </section>
+
+{{if .CanRotate}}
+<section class="card">
+  <h2>Rotate keys</h2>
+  <p class="muted small">Issues a new key pair and preshared key; the current one stops working immediately. Paste a public key made on the device to keep the private key off the server entirely.</p>
+  <form method="post" action="/devices/{{.Peer.ID}}/rotate" class="row" data-confirm="Replace the keys of {{.Peer.Name}}? The current config stops working.">
+    <input type="hidden" name="csrf" value="{{$csrf}}">
+    <input name="public_key" placeholder="New public key (optional)" maxlength="44" autocomplete="off" spellcheck="false">
+    <button class="danger">Rotate keys</button>
+  </form>
+</section>
+{{end}}
 {{end}}
 {{end}}

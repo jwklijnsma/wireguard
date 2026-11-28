@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jwklijnsma/wireguard/internal/totp"
 	"github.com/jwklijnsma/wireguard/internal/wgkey"
 )
 
@@ -50,10 +49,16 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-var errAuth = errors.New("invalid username, password or 2FA code")
+var (
+	errAuth        = errors.New("invalid username, password or 2FA code")
+	errRateLimited = errors.New("too many failed attempts, try again later")
+)
 
 // authenticate checks password + TOTP. Caller holds the write lock.
-func (s *Server) authenticate(st *state, username, password, code string, now time.Time) (*User, error) {
+// When the password is right but the code is wrong (or replayed) it returns
+// the user together with errAuth, so the caller can charge the per-user 2FA
+// limiter; the client only ever sees the generic error.
+func (s *Server) authenticate(st *state, username, password, code, ip string, now time.Time) (*User, error) {
 	u := st.userByName(username)
 	if u == nil {
 		CheckPassword(dummyHash, password)
@@ -63,11 +68,12 @@ func (s *Server) authenticate(st *state, username, password, code string, now ti
 		return nil, errAuth
 	}
 	if u.TOTPEnabled {
-		c, ok := totp.Validate(u.TOTPSecret, code, now)
-		if !ok || c <= u.TOTPLast {
-			return nil, errAuth
+		if s.totpBlocked(u.ID, ip) {
+			return u, errRateLimited
 		}
-		u.TOTPLast = c
+		if !acceptTOTP(u, code, now) {
+			return u, errAuth
+		}
 	}
 	return u, nil
 }
@@ -81,7 +87,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	key := "api:" + ip + ":" + strings.ToLower(req.Username)
 	if s.limit.blocked(key) || s.limit.blocked("ip:"+ip) {
-		writeJSON(w, 429, apiErr{Error: "too many failed attempts, try again later", Code: "rate_limited"})
+		writeJSON(w, 429, apiErr{Error: errRateLimited.Error(), Code: "rate_limited"})
 		return
 	}
 	if !wgkey.Valid(req.PublicKey) {
@@ -98,10 +104,19 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 	var resp loginResp
 	var status int
 	var apiError apiErr
+	var totpUser string // set when the password was right but the 2FA code was not
 	now := time.Now().UTC()
 	err := s.store.Update(func(st *state) error {
-		u, err := s.authenticate(st, req.Username, req.Password, req.TOTP, now)
+		u, err := s.authenticate(st, req.Username, req.Password, req.TOTP, ip, now)
+		if errors.Is(err, errRateLimited) {
+			st.audit(req.Username, "client.login.rate_limited", name, ip)
+			status, apiError = 429, apiErr{Error: err.Error(), Code: "rate_limited"}
+			return nil
+		}
 		if err != nil {
+			if u != nil {
+				totpUser = u.ID
+			}
 			st.audit(req.Username, "client.login.failed", name, ip)
 			status, apiError = 401, apiErr{Error: err.Error(), Code: "auth"}
 			return nil
@@ -151,6 +166,7 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 		tok := randToken()
 		p.TokenHash = hashToken(tok)
 		st.audit(u.Username, "client.login", p.Name, ip)
+		totpUser = u.ID
 		resp = loginResp{Token: tok, ExpiresAt: p.ActiveUntil, Config: s.buildConfig(st, p)}
 		resp.Config.PrivateKey = ""
 		if prof != nil {
@@ -167,11 +183,15 @@ func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
 		if status == 401 {
 			s.limit.failed(key)
 			s.limit.failed("ip:" + ip)
+			if totpUser != "" {
+				s.totpFailed(totpUser, ip)
+			}
 		}
 		writeJSON(w, status, apiError)
 		return
 	}
 	s.limit.reset(key)
+	s.totpSucceeded(totpUser)
 	s.notify()
 	writeJSON(w, 200, resp)
 }

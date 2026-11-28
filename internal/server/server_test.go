@@ -143,8 +143,9 @@ func TestRouterAlwaysOnAndExports(t *testing.T) {
 				prof = p.ID
 			}
 		}
-		p := &Peer{ID: newID(), Name: "office", Kind: KindRouter, ProfileID: prof, PublicKey: pub, PrivateKey: priv,
+		p := &Peer{ID: newID(), Name: "office", Kind: KindRouter, ProfileID: prof, PublicKey: pub,
 			Address: "10.8.0.10", RemoteSubnets: []string{"192.168.20.0/24"}, Enabled: true}
+		s.keys.put(p.ID, priv, pub)
 		st.Peers = append(st.Peers, p)
 		cfg = s.buildConfig(st, p)
 		return nil
