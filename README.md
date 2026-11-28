@@ -33,7 +33,7 @@ WireGuard itself has no login step: anyone holding a valid key can connect. WG2F
 
 ## Features
 
-- **2FA everywhere.** TOTP (RFC 6238) works with Google/Microsoft Authenticator, Authy, 1Password and Bitwarden. Enrolment uses a QR code. Codes can't be replayed, and failed logins are rate-limited. Admins must enrol.
+- **2FA everywhere.** TOTP (RFC 6238) works with Google/Microsoft Authenticator, Authy, 1Password and Bitwarden. Enrolment uses a QR code. Codes are single-use, and failed logins and 2FA codes are rate-limited per user and per IP. Admins must enrol.
 - **VPN sessions.** A device is unlocked for the profile's session length (default 12 h), then it is removed from WireGuard automatically. Admins can revoke a session or disable a device instantly.
 - **VPN profiles.** Each profile sets its routes (full or split tunnel), DNS, MTU, keepalive, session length, and whether 2FA is required.
 - **Routers and site-to-site.** Add a router with its LAN subnets. The server routes them, and other routers reach them too. Configs export to **MikroTik RouterOS 7**, **OpenWrt UCI**, **OPNsense/pfSense** and **wg-quick**.
@@ -174,7 +174,7 @@ The device generates its own key pair; the private key never leaves the device.
 ## Security notes and limitations
 
 - The tunnel is **IPv4 only** for now. On full-tunnel profiles the desktop client blocks IPv6 (routed into the tunnel and dropped), so it cannot leak.
-- **Windows DNS:** the tunnel's DNS servers are set on the WG2FA adapter with a low metric, but there is no firewall-based leak protection yet (the official client uses WFP rules for that).
+- **Windows DNS:** the tunnel's DNS servers are set on the WG2FA adapter, and on full-tunnel profiles a WFP filter blocks port 53 to everything else (same approach as the official client, DNS part only).
 - **Routers** can't do TOTP, so they are always on. Disable a router in the GUI to cut it off.
 - Web sessions are kept in memory, so a server restart signs everyone out of the GUI. VPN sessions are persisted and survive restarts.
 

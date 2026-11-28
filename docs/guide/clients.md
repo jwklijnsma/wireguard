@@ -41,4 +41,4 @@ The device generates its own key pair. The private key never leaves the device.
 ## Known limitations
 
 - The tunnel is **IPv4 only**. On full-tunnel profiles the client routes all global IPv6 (`2000::/3`) into the tunnel, where it is dropped, so IPv6 cannot leak; the client shows *IPv6: blocked*.
-- **Windows DNS:** the tunnel's DNS servers are set on the WG2FA adapter with a low metric, but there is no firewall-based (WFP) leak protection yet.
+- **Windows DNS:** the tunnel's DNS servers are set on the WG2FA adapter. On full-tunnel profiles a WFP filter also blocks port 53 to every other address, so Windows can't leak queries to the LAN resolver. The filter lives in a dynamic WFP session and disappears when the client stops or crashes.

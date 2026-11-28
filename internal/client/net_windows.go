@@ -8,6 +8,8 @@ import (
 	"net/netip"
 	"strings"
 	"time"
+
+	"github.com/jwklijnsma/wireguard/internal/client/wfp"
 )
 
 const defaultIfName = "WG2FA"
@@ -79,6 +81,26 @@ func configureOS(ifname string, addr netip.Prefix, routes []netip.Prefix, dns []
 	}
 	if len(dns) > 0 {
 		run("ipconfig", "/flushdns")
+	}
+	// DNS leak stopgap: Windows' smart multi-homed name resolution also asks
+	// the resolvers of the physical adapters. On a full tunnel, a WFP filter
+	// blocks port 53 to everything except the pushed DNS servers. The filters
+	// sit in a dynamic WFP session, so they vanish with the process.
+	if full && len(dns) > 0 {
+		var allow []netip.Addr
+		for _, d := range dns {
+			if a, err := netip.ParseAddr(strings.TrimSpace(d)); err == nil {
+				allow = append(allow, a.Unmap())
+			}
+		}
+		if len(allow) == 0 {
+			logf("DNS leak protection: no valid DNS server addresses in %v", dns)
+		} else if err := wfp.BlockDNS(allow); err != nil {
+			logf("DNS leak protection: %v", err)
+		} else {
+			u.add(wfp.Unblock)
+			logf("DNS leak protection active (port 53 only to %v)", allow)
+		}
 	}
 	// interface routes and DNS vanish together with the Wintun adapter
 	if blockIPv6(full, endpoint) {

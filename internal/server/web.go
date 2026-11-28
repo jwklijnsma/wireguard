@@ -177,6 +177,7 @@ func (s *Server) routes() http.Handler {
 	user("GET /devices/{id}/config", s.deviceConfig)
 	user("GET /devices/{id}/qr.png", s.deviceQR)
 	user("POST /devices/{id}/delete", s.deviceDelete)
+	user("POST /devices/{id}/rotate", s.deviceRotate)
 
 	admin("GET /admin/users", s.usersPage)
 	admin("POST /admin/users", s.userCreate)
@@ -324,8 +325,7 @@ func (s *Server) login2FAPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := s.clientIP(r)
-	key := "2fa:" + ws.UserID
-	if s.limit.blocked(key) {
+	if s.totpBlocked(ws.UserID, ip) {
 		s.sess.delete(tok)
 		s.render(w, r, "login", page{Title: "Sign in", Error: "Too many failed 2FA attempts. Try again later."})
 		return
@@ -336,8 +336,7 @@ func (s *Server) login2FAPost(w http.ResponseWriter, r *http.Request) {
 		if u == nil {
 			return nil
 		}
-		if c, valid := totp.Validate(u.TOTPSecret, r.FormValue("code"), time.Now()); valid && c > u.TOTPLast {
-			u.TOTPLast = c
+		if acceptTOTP(u, r.FormValue("code"), time.Now()) {
 			ok = true
 			st.audit(u.Username, "web.login", "password + 2FA", ip)
 		} else {
@@ -346,11 +345,11 @@ func (s *Server) login2FAPost(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if !ok {
-		s.limit.failed(key)
+		s.totpFailed(ws.UserID, ip)
 		s.render(w, r, "login2fa", page{Title: "Two-factor authentication", Error: "Invalid or already used code."})
 		return
 	}
-	s.limit.reset(key)
+	s.totpSucceeded(ws.UserID)
 	s.sess.delete(tok)
 	s.setSessionCookie(w, r, s.sess.create(ws.UserID, false, webTTL))
 	http.Redirect(w, r, s.landing(ws.UserID), http.StatusSeeOther)
@@ -388,7 +387,7 @@ func (s *Server) rows(st *state, filter func(*Peer) bool) []peerRow {
 			continue
 		}
 		row := peerRow{Peer: *p, Active: st.isActive(p, now), Stats: stats[p.PublicKey]}
-		row.HasPrivateKey = p.PrivateKey != ""
+		row.HasPrivateKey = s.keys.get(p.ID, p.PublicKey) != ""
 		row.PrivateKey, row.TokenHash = "", ""
 		if u := st.user(p.UserID); u != nil {
 			row.UserName = u.Username
@@ -500,19 +499,30 @@ func (s *Server) totpStart(w http.ResponseWriter, r *http.Request, me *User, ws 
 }
 
 func (s *Server) totpConfirm(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
+	ip := s.clientIP(r)
+	if s.totpBlocked(me.ID, ip) {
+		redirect(w, r, "/account", "Too many failed codes, try again later.")
+		return
+	}
 	msg := "Code did not match — check the time on your phone and try again."
+	ok := false
 	_ = s.store.Update(func(st *state) error {
 		u := st.user(me.ID)
 		if u.TOTPEnabled || u.TOTPSecret == "" {
 			return nil
 		}
-		if c, ok := totp.Validate(u.TOTPSecret, r.FormValue("code"), time.Now()); ok {
-			u.TOTPEnabled, u.TOTPLast = true, c
+		if acceptTOTP(u, r.FormValue("code"), time.Now()) {
+			u.TOTPEnabled, ok = true, true
 			msg = "Two-factor authentication is now active."
-			st.audit(u.Username, "account.2fa.enabled", "", s.clientIP(r))
+			st.audit(u.Username, "account.2fa.enabled", "", ip)
 		}
 		return nil
 	})
+	if ok {
+		s.totpSucceeded(me.ID)
+	} else {
+		s.totpFailed(me.ID, ip)
+	}
 	redirect(w, r, "/account", msg)
 }
 
@@ -540,7 +550,7 @@ func (s *Server) totpQR(w http.ResponseWriter, r *http.Request, me *User, ws *we
 
 func (s *Server) vpnActivate(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
 	ip := s.clientIP(r)
-	if s.limit.blocked("2fa:" + me.ID) {
+	if s.totpBlocked(me.ID, ip) {
 		redirect(w, r, "/", "Too many failed codes, try again later.")
 		return
 	}
@@ -548,12 +558,10 @@ func (s *Server) vpnActivate(w http.ResponseWriter, r *http.Request, me *User, w
 	ok := false
 	_ = s.store.Update(func(st *state) error {
 		u := st.user(me.ID)
-		c, valid := totp.Validate(u.TOTPSecret, r.FormValue("code"), time.Now())
-		if !u.TOTPEnabled || !valid || c <= u.TOTPLast {
+		if !u.TOTPEnabled || !acceptTOTP(u, r.FormValue("code"), time.Now()) {
 			st.audit(u.Username, "vpn.activate.failed", "", ip)
 			return nil
 		}
-		u.TOTPLast = c
 		ok = true
 		n := 0
 		now := time.Now().UTC()
@@ -576,10 +584,10 @@ func (s *Server) vpnActivate(w http.ResponseWriter, r *http.Request, me *User, w
 		return nil
 	})
 	if ok {
-		s.limit.reset("2fa:" + me.ID)
+		s.totpSucceeded(me.ID)
 		s.notify()
 	} else {
-		s.limit.failed("2fa:" + me.ID)
+		s.totpFailed(me.ID, ip)
 	}
 	redirect(w, r, "/", msg)
 }
@@ -606,7 +614,14 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request, me *User, 
 		redirect(w, r, "/", "Device name is required (max 64 chars).")
 		return
 	}
-	var id, msg string
+	// Preferred: the device made its own key pair and only gives us the
+	// public key. Otherwise we generate one and reveal it once (keys.go).
+	ownPub := strings.TrimSpace(r.FormValue("public_key"))
+	if ownPub != "" && !wgkey.Valid(ownPub) {
+		redirect(w, r, "/", "That is not a valid WireGuard public key.")
+		return
+	}
+	var id, msg, priv string
 	err := s.store.Update(func(st *state) error {
 		n := 0
 		for _, p := range st.Peers {
@@ -618,19 +633,34 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request, me *User, 
 			msg = "Device limit reached."
 			return nil
 		}
+		pub := ownPub
+		if pub != "" {
+			if st.peerByKey(pub) != nil {
+				msg = "That public key is already registered."
+				return nil
+			}
+		} else {
+			var err error
+			if priv, pub, err = wgkey.Generate(); err != nil {
+				return err
+			}
+		}
 		addr, err := st.allocIP(s.subnet)
 		if err != nil {
 			return err
 		}
-		priv, pub, err := wgkey.Generate()
-		if err != nil {
-			return err
-		}
 		p := &Peer{ID: newID(), Name: name, Kind: KindDevice, UserID: me.ID, ProfileID: me.ProfileID,
-			PublicKey: pub, PrivateKey: priv, PresharedKey: wgkey.PresharedKey(), Address: addr, Enabled: true, CreatedAt: time.Now().UTC()}
+			PublicKey: pub, PresharedKey: wgkey.PresharedKey(), Address: addr, Enabled: true, CreatedAt: time.Now().UTC()}
 		st.Peers = append(st.Peers, p)
-		st.audit(me.Username, "device.created", name+" "+addr, s.clientIP(r))
+		detail := name + " " + addr
+		if ownPub != "" {
+			detail += " (own key)"
+		}
+		st.audit(me.Username, "device.created", detail, s.clientIP(r))
 		id = p.ID
+		if priv != "" {
+			s.keys.put(p.ID, priv, pub)
+		}
 		return nil
 	})
 	if err != nil {
@@ -642,7 +672,11 @@ func (s *Server) deviceCreate(w http.ResponseWriter, r *http.Request, me *User, 
 		return
 	}
 	s.notify()
-	redirect(w, r, "/devices/"+id, "Device created. Import the config, then unlock it with your 2FA code.")
+	if ownPub != "" {
+		redirect(w, r, "/devices/"+id, "Device created with your own key. Put your private key into the config, then unlock it with your 2FA code.")
+		return
+	}
+	redirect(w, r, "/devices/"+id, "Device created. Import the config now — the private key is shown only once and never stored. Then unlock it with your 2FA code.")
 }
 
 // peerFor returns a copy of the peer if me may see it.
@@ -662,11 +696,12 @@ func (s *Server) peerFor(me *User, id string) (*Peer, clientConfig, bool) {
 }
 
 type deviceData struct {
-	Peer    *Peer
-	Config  string
-	Formats any
-	Format  string
-	HasKey  bool
+	Peer      *Peer
+	Config    string
+	Formats   any
+	Format    string
+	HasKey    bool // the one-time private key is still in memory
+	CanRotate bool
 }
 
 func (s *Server) devicePage(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
@@ -688,7 +723,8 @@ func (s *Server) devicePage(w http.ResponseWriter, r *http.Request, me *User, ws
 		return
 	}
 	s.render(w, r, "device", page{Title: p.Name, Me: me, CSRF: ws.CSRF, Data: deviceData{
-		Peer: p, Config: text, Formats: exportFormats, Format: f, HasKey: p.PrivateKey != ""}})
+		Peer: p, Config: text, Formats: exportFormats, Format: f, HasKey: cfg.PrivateKey != "",
+		CanRotate: p.Kind == KindDevice || me.IsAdmin}})
 }
 
 func (s *Server) deviceConfig(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
@@ -717,7 +753,7 @@ func (s *Server) deviceConfig(w http.ResponseWriter, r *http.Request, me *User, 
 
 func (s *Server) deviceQR(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
 	p, cfg, ok := s.peerFor(me, r.PathValue("id"))
-	if !ok || p.PrivateKey == "" {
+	if !ok || cfg.PrivateKey == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -734,6 +770,7 @@ func (s *Server) deviceDelete(w http.ResponseWriter, r *http.Request, me *User, 
 		}
 		st.audit(me.Username, "peer.deleted", p.Name+" "+p.Address, s.clientIP(r))
 		st.deletePeer(id)
+		s.keys.drop(id)
 		return nil
 	})
 	s.notify()
@@ -742,6 +779,61 @@ func (s *Server) deviceDelete(w http.ResponseWriter, r *http.Request, me *User, 
 		back = "/admin/routers"
 	}
 	redirect(w, r, back, "Deleted.")
+}
+
+// deviceRotate replaces the peer's key pair (and preshared key). The old key
+// stops working on the next reconcile, which happens right away. With a
+// public_key form value the device's own key is registered instead of a
+// server-generated one.
+func (s *Server) deviceRotate(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
+	id := r.PathValue("id")
+	ownPub := strings.TrimSpace(r.FormValue("public_key"))
+	if ownPub != "" && !wgkey.Valid(ownPub) {
+		redirect(w, r, "/devices/"+id, "That is not a valid WireGuard public key.")
+		return
+	}
+	msg := ""
+	found := false
+	err := s.store.Update(func(st *state) error {
+		p := st.peer(id)
+		if p == nil || (!me.IsAdmin && p.UserID != me.ID) || (p.Kind == KindRouter && !me.IsAdmin) {
+			return nil
+		}
+		found = true
+		pub, priv := ownPub, ""
+		if pub != "" {
+			if o := st.peerByKey(pub); o != nil && o.ID != p.ID {
+				msg = "That public key is already registered."
+				return nil
+			}
+		} else {
+			var err error
+			if priv, pub, err = wgkey.Generate(); err != nil {
+				return err
+			}
+		}
+		p.PublicKey, p.PresharedKey, p.TokenHash = pub, wgkey.PresharedKey(), ""
+		s.keys.drop(p.ID)
+		if priv != "" {
+			s.keys.put(p.ID, priv, pub)
+		}
+		st.audit(me.Username, "peer.keys.rotated", p.Name, s.clientIP(r))
+		msg = "New keys issued. Import the new config now — the private key is shown only once."
+		if ownPub != "" {
+			msg = "Public key replaced."
+		}
+		return nil
+	})
+	if err != nil {
+		redirect(w, r, "/devices/"+id, err.Error())
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	s.notify()
+	redirect(w, r, "/devices/"+id, msg)
 }
 
 // ---------- admin: users ----------
@@ -864,11 +956,18 @@ func (s *Server) userPassword(w http.ResponseWriter, r *http.Request, me *User, 
 		if u := st.user(r.PathValue("id")); u != nil {
 			u.PassHash = HashPassword(pw)
 			s.sess.deleteUser(u.ID)
+			// a reset usually follows a suspected compromise: end VPN sessions too
+			for _, p := range st.Peers {
+				if p.UserID == u.ID {
+					p.ActiveUntil, p.TokenHash = time.Time{}, ""
+				}
+			}
 			st.audit(me.Username, "user.password.reset", u.Username, s.clientIP(r))
 		}
 		return nil
 	})
-	redirect(w, r, "/admin/users", "Password set.")
+	s.notify()
+	redirect(w, r, "/admin/users", "Password set; the user's VPN sessions were ended.")
 }
 
 func (s *Server) userDelete(w http.ResponseWriter, r *http.Request, me *User, ws *webSession) {
@@ -1069,10 +1168,12 @@ func (s *Server) routerCreate(w http.ResponseWriter, r *http.Request, me *User, 
 			}
 			p.PublicKey = pub
 		} else {
-			p.PrivateKey, p.PublicKey, err = wgkey.Generate()
+			var priv string
+			priv, p.PublicKey, err = wgkey.Generate()
 			if err != nil {
 				return err
 			}
+			s.keys.put(p.ID, priv, p.PublicKey)
 		}
 		if st.profile(p.ProfileID) == nil || st.profile(p.ProfileID).ID != p.ProfileID {
 			p.ProfileID = ""

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -28,6 +29,9 @@ type WG struct {
 	mu     sync.Mutex
 	routes map[string]bool // routes we added for router LANs
 	stats  map[string]PeerStats
+
+	conntrackOnce sync.Once
+	conntrackBin  string // "" if conntrack(8) is not installed
 }
 
 type PeerStats struct {
@@ -134,6 +138,45 @@ func (w *WG) dump() (map[string]currentPeer, error) {
 	return cur, nil
 }
 
+// flushConntrack deletes connection-tracking state to and from the given
+// prefixes. Best effort: without conntrack(8) only a warning is logged.
+func (w *WG) flushConntrack(prefixes []string) {
+	if w.DryRun || len(prefixes) == 0 {
+		return
+	}
+	w.conntrackOnce.Do(func() {
+		if p, err := exec.LookPath("conntrack"); err == nil {
+			w.conntrackBin = p
+		} else {
+			log.Printf("wg: conntrack(8) not found; existing flows of revoked peers are only cut when WireGuard drops the peer")
+		}
+	})
+	if w.conntrackBin == "" {
+		return
+	}
+	for _, a := range prefixes {
+		pfx, err := netip.ParsePrefix(a)
+		if err != nil || !pfx.Addr().Is4() {
+			continue
+		}
+		for _, args := range conntrackArgs(pfx.Masked()) {
+			// exit status 1 just means "no matching entries"
+			_, _ = w.run("", w.conntrackBin, args...)
+		}
+	}
+}
+
+// conntrackArgs builds the conntrack(8) invocations that delete all entries
+// whose original source or destination lies in pfx.
+func conntrackArgs(pfx netip.Prefix) [][]string {
+	addr := pfx.Addr().String()
+	if pfx.IsSingleIP() {
+		return [][]string{{"-D", "-s", addr}, {"-D", "-d", addr}}
+	}
+	mask := net.IP(net.CIDRMask(pfx.Bits(), 32)).String()
+	return [][]string{{"-D", "-s", addr, "--mask-src", mask}, {"-D", "-d", addr, "--mask-dst", mask}}
+}
+
 // Stats returns the last observed per-peer statistics.
 func (w *WG) Stats() map[string]PeerStats {
 	w.mu.Lock()
@@ -176,12 +219,18 @@ func (w *WG) Apply(desired map[string]desiredPeer) error {
 			log.Printf("wg: peer %s… enabled (%s)", pub[:8], strings.Join(d.AllowedIPs, ","))
 		}
 	}
-	for pub := range cur {
+	for pub, c := range cur {
 		if _, ok := desired[pub]; !ok {
+			// Removing the peer drops its endpoint and session keys at once:
+			// packets in flight no longer decrypt and no new handshake can
+			// succeed. Then flush its conntrack entries so the firewall's
+			// RELATED,ESTABLISHED rule cannot keep old flows alive (e.g. once
+			// the tunnel IP is reused or the peer comes back).
 			if _, err := w.run("", "wg", "set", w.Iface, "peer", pub, "remove"); err != nil {
 				errs = append(errs, err.Error())
 			} else {
-				log.Printf("wg: peer %s… removed (inactive / 2FA session expired)", pub[:8])
+				w.flushConntrack(c.AllowedIPs)
+				log.Printf("wg: peer %s… removed (inactive / 2FA session expired / revoked)", pub[:8])
 			}
 		}
 	}

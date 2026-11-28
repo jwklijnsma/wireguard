@@ -12,7 +12,7 @@ RUN go mod tidy \
 
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk upgrade --no-cache \
- && apk add --no-cache wireguard-tools-wg iproute2-minimal iptables ca-certificates-bundle tzdata
+ && apk add --no-cache wireguard-tools-wg iproute2-minimal iptables conntrack-tools ca-certificates-bundle tzdata
 COPY --from=build /out/wg2fa-server /out/wireguard-go /usr/local/bin/
 COPY packaging/downloads/ /usr/share/wg2fa/downloads/
 COPY packaging/docker/entrypoint.sh /entrypoint.sh

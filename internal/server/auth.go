@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jwklijnsma/wireguard/internal/totp"
 )
 
 const pbkdf2Iter = 600_000
@@ -219,3 +221,45 @@ func (l *limiter) reset(key string) {
 	defer l.mu.Unlock()
 	delete(l.fail, key)
 }
+
+// ---- TOTP: replay protection + per-user / per-IP rate limiting ----
+//
+// Every place that accepts a one-time code goes through acceptTOTP and the
+// totp* limiter helpers, so the rules cannot drift apart between the web
+// login, VPN unlock, enrolment and the native client API.
+
+// acceptTOTP validates code for u and consumes it. A code is accepted only if
+// its time step is strictly newer than the last accepted one, so a code
+// (or an older one still inside the ±1 step skew window) can never be used
+// twice — not even within its own 30 s window, and not across endpoints.
+// Caller holds the store write lock.
+func acceptTOTP(u *User, code string, now time.Time) bool {
+	if u == nil || u.TOTPSecret == "" {
+		return false
+	}
+	c, ok := totp.Validate(u.TOTPSecret, code, now)
+	if !ok || c <= u.TOTPLast {
+		return false
+	}
+	u.TOTPLast = c
+	return true
+}
+
+func totpUserKey(uid string) string { return "2fa:" + uid }
+func totpIPKey(ip string) string    { return "2fa-ip:" + ip }
+
+// totpBlocked reports whether 2FA attempts are currently rate limited for
+// this user (from any IP) or from this IP (for any user).
+func (s *Server) totpBlocked(uid, ip string) bool {
+	return s.limit.blocked(totpUserKey(uid)) || s.limit.blocked(totpIPKey(ip))
+}
+
+func (s *Server) totpFailed(uid, ip string) {
+	s.limit.failed(totpUserKey(uid))
+	s.limit.failed(totpIPKey(ip))
+}
+
+// totpSucceeded clears the per-user counter. The per-IP counter is left to
+// expire on its own so one valid account cannot be used to reset the budget
+// of an IP that is guessing codes for others.
+func (s *Server) totpSucceeded(uid string) { s.limit.reset(totpUserKey(uid)) }

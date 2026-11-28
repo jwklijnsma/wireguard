@@ -53,13 +53,15 @@ type Profile struct {
 }
 
 type Peer struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Kind          PeerKind  `json:"kind"`
-	UserID        string    `json:"user_id,omitempty"`
-	ProfileID     string    `json:"profile_id"`
-	PublicKey     string    `json:"public_key"`
-	PrivateKey    string    `json:"private_key,omitempty"` // only for server-generated configs
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Kind      PeerKind `json:"kind"`
+	UserID    string   `json:"user_id,omitempty"`
+	ProfileID string   `json:"profile_id"`
+	PublicKey string   `json:"public_key"`
+	// PrivateKey is only read to scrub keys persisted by older versions;
+	// it is never written any more (see keys.go).
+	PrivateKey    string    `json:"private_key,omitempty"`
 	PresharedKey  string    `json:"preshared_key"`
 	Address       string    `json:"address"`        // tunnel IP, e.g. 10.8.0.5
 	RemoteSubnets []string  `json:"remote_subnets"` // router: LANs behind it

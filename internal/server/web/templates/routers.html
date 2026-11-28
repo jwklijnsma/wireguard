@@ -34,7 +34,7 @@
     <label>Name <input name="name" required placeholder="Office Heerenveen"></label>
     <label>LAN subnets behind it <input name="subnets" placeholder="192.168.20.0/24"></label>
     <label>Profile <select name="profile">{{range .Profiles}}{{if not .Require2FA}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}</select></label>
-    <label>Router public key (optional) <input name="public_key" placeholder="leave empty to generate a key pair"></label>
+    <label>Router public key (optional) <input name="public_key" placeholder="recommended; empty = one-time generated key"></label>
     <div><button class="primary">Create router</button></div>
   </form>
 </section>

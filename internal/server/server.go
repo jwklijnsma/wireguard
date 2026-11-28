@@ -48,6 +48,7 @@ type Server struct {
 	subnet  netip.Prefix
 	sess    *sessions
 	limit   *limiter
+	keys    *keyVault
 	changed chan struct{}
 	tmpl    *templates
 
@@ -113,7 +114,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		cfg: cfg, store: st, subnet: subnet.Masked(),
-		sess: newSessions(), limit: newLimiter(),
+		sess: newSessions(), limit: newLimiter(), keys: newKeyVault(),
 		changed: make(chan struct{}, 1), tmpl: t,
 		trusted: trusted, adminNets: adminNets, blockNets: blockNets,
 		wg: &WG{Iface: cfg.Iface, Port: cfg.Port, Subnet: subnet.Masked(), MTU: cfg.MTU, DataDir: cfg.DataDir, DryRun: cfg.DryRun},
@@ -134,6 +135,7 @@ func (s *Server) bootstrap() error {
 			st.ServerPrivateKey, st.ServerPublicKey = priv, pub
 			log.Printf("generated server key, public key %s", pub)
 		}
+		scrubStoredPrivateKeys(st)
 		if len(st.Profiles) == 0 {
 			st.Profiles = []*Profile{
 				{ID: newID(), Name: "Full tunnel (2FA)", Description: "All traffic through the VPN, 2FA session of 12 hours",
@@ -191,9 +193,33 @@ func (s *Server) desired() map[string]desiredPeer {
 	return out
 }
 
+// nextExpiry returns how long until the earliest 2FA session among the
+// currently active peers runs out (0 if none is pending).
+func (s *Server) nextExpiry(now time.Time) time.Duration {
+	var next time.Time
+	s.store.View(func(st *state) {
+		for _, p := range st.Peers {
+			if p.ActiveUntil.IsZero() || !p.ActiveUntil.After(now) || !st.isActive(p, now) {
+				continue
+			}
+			if next.IsZero() || p.ActiveUntil.Before(next) {
+				next = p.ActiveUntil
+			}
+		}
+	})
+	if next.IsZero() {
+		return 0
+	}
+	return next.Sub(now)
+}
+
+// reconcileInterval is the safety-net resync period; expiries and explicit
+// revocations do not wait for it.
+const reconcileInterval = 15 * time.Second
+
 func (s *Server) reconcileLoop(ctx context.Context) {
-	t := time.NewTicker(15 * time.Second)
-	defer t.Stop()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 	for {
 		s.applyFirewall() // rules first, so a peer is never live without its policy
 		if err := s.wg.Apply(s.desired()); err != nil {
@@ -202,10 +228,26 @@ func (s *Server) reconcileLoop(ctx context.Context) {
 		s.applyFirewall()
 		s.sess.gc()
 		s.limit.gc()
+		stats := s.wg.Stats()
+		s.keys.sweep(func(pub string) bool { return !stats[pub].LastHandshake.IsZero() })
+
+		// Wake exactly when the next 2FA session expires, so a peer is
+		// removed on time instead of up to reconcileInterval later.
+		wait := reconcileInterval
+		if d := s.nextExpiry(time.Now()); d > 0 && d < wait {
+			wait = d + 50*time.Millisecond
+		}
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(wait)
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-timer.C:
 		case <-s.changed:
 		}
 	}
@@ -266,7 +308,7 @@ type clientConfig struct {
 func (s *Server) buildConfig(st *state, p *Peer) clientConfig {
 	prof := st.profile(p.ProfileID)
 	c := clientConfig{
-		Address: p.Address + "/32", PrivateKey: p.PrivateKey, ServerPublicKey: st.ServerPublicKey,
+		Address: p.Address + "/32", PrivateKey: s.keys.get(p.ID, p.PublicKey), ServerPublicKey: st.ServerPublicKey,
 		PresharedKey: p.PresharedKey, Endpoint: s.cfg.Endpoint, MTU: 1420, Keepalive: 25,
 	}
 	if prof != nil {
